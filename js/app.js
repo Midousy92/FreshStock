@@ -1474,7 +1474,7 @@ function initAuth() {
                 loginForm.reset();
             } catch (error) {
                 console.error("Erreur de connexion:", error);
-                if (email === "skhamidou03@gmail.com" && password === "midou") {
+                if (email === "skhamidou03@gmail.com" && password === "Menia042912") {
                     window.isDemoMode = true;
                     document.getElementById('login-screen').style.display = 'none';
                     document.getElementById('app-container').style.display = 'flex';
