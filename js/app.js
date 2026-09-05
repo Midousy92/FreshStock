@@ -1443,16 +1443,23 @@ function initAuth() {
     const loginError = document.getElementById('loginError');
     const loginBtn = document.getElementById('loginBtn');
     
+    // Restaurer la session locale au chargement si elle existe
+    const savedDemoUser = localStorage.getItem('freshstock_demo_user');
+    if (savedDemoUser) {
+        window.isDemoMode = true;
+    }
+
     // Écouteur d'état d'authentification
     onAuthStateChanged(auth, (user) => {
         const loginScreen = document.getElementById('login-screen');
         const appContainer = document.getElementById('app-container');
+        const demoUser = localStorage.getItem('freshstock_demo_user');
         
-        if (user || window.isDemoMode) {
+        if (user || window.isDemoMode || demoUser) {
             loginScreen.style.display = 'none';
             appContainer.style.display = 'flex';
             const emailLabel = document.getElementById('currentUserEmail');
-            if(emailLabel) emailLabel.textContent = user ? user.email.split('@')[0] : "Demo Admin";
+            if(emailLabel) emailLabel.textContent = user ? user.email.split('@')[0] : (demoUser || "Demo Admin");
         } else {
             loginScreen.style.display = 'flex';
             appContainer.style.display = 'none';
@@ -1471,11 +1478,13 @@ function initAuth() {
             
             try {
                 await signInWithEmailAndPassword(auth, email, password);
+                localStorage.removeItem('freshstock_demo_user');
                 loginForm.reset();
             } catch (error) {
                 console.error("Erreur de connexion:", error);
                 if (email === "skhamidou03@gmail.com" && password === "Menia042912") {
                     window.isDemoMode = true;
+                    localStorage.setItem('freshstock_demo_user', "skhamidou03");
                     document.getElementById('login-screen').style.display = 'none';
                     document.getElementById('app-container').style.display = 'flex';
                     const emailLabel = document.getElementById('currentUserEmail');
@@ -1485,6 +1494,7 @@ function initAuth() {
                     loginError.style.display = 'block';
                     document.getElementById('btnDemoMode')?.addEventListener('click', () => {
                         window.isDemoMode = true;
+                        localStorage.setItem('freshstock_demo_user', "Demo Admin");
                         document.getElementById('login-screen').style.display = 'none';
                         document.getElementById('app-container').style.display = 'flex';
                     });
@@ -1503,6 +1513,7 @@ function initAuth() {
     if(logoutBtn) {
         logoutBtn.addEventListener('click', () => {
             window.isDemoMode = false;
+            localStorage.removeItem('freshstock_demo_user');
             signOut(auth);
             document.getElementById('login-screen').style.display = 'flex';
             document.getElementById('app-container').style.display = 'none';
