@@ -24,6 +24,7 @@ const salesCollection = collection(db, 'sales');
 let allFruits = [];
 let allSalesData = [];
 let allRepaymentsData = [];
+let allHistoryData = [];
 
 const DEFAULT_DEMO_FRUITS = [
     {
@@ -115,6 +116,33 @@ const DEFAULT_DEMO_SALES = [
     }
 ];
 
+const DEFAULT_DEMO_HISTORY = [
+    {
+        id: "hist_demo_1",
+        action: "VENTE",
+        detail: "Vente de 30 kg de Banane Bio au client Fatou Sow",
+        createdAtStr: "05/09/2026 10:15"
+    },
+    {
+        id: "hist_demo_2",
+        action: "VENTE",
+        detail: "Vente de 50 kg de Mangues Kent au client Mamadou Diallo",
+        createdAtStr: "04/09/2026 14:30"
+    },
+    {
+        id: "hist_demo_3",
+        action: "AJOUT",
+        detail: "Arrivage de 300 kg de Banane Bio enregistré (Origine: Tambacounda)",
+        createdAtStr: "02/09/2026 09:00"
+    },
+    {
+        id: "hist_demo_4",
+        action: "AJOUT",
+        detail: "Arrivage de 500 kg de Mangues Kent enregistré (Origine: Mbour, Sénégal)",
+        createdAtStr: "01/09/2026 08:30"
+    }
+];
+
 function loadLocalStorageData() {
     const savedFruits = localStorage.getItem('freshstock_fruits');
     if (savedFruits) {
@@ -138,6 +166,15 @@ function loadLocalStorageData() {
     if (savedRepayments) {
         try { allRepaymentsData = JSON.parse(savedRepayments); } catch(e) {}
     }
+
+    const savedHistory = localStorage.getItem('freshstock_history');
+    if (savedHistory) {
+        try { allHistoryData = JSON.parse(savedHistory); } catch(e) {}
+    }
+    if (!allHistoryData || allHistoryData.length === 0) {
+        allHistoryData = [...DEFAULT_DEMO_HISTORY];
+        saveLocalStorageData();
+    }
 }
 
 function saveLocalStorageData() {
@@ -145,6 +182,7 @@ function saveLocalStorageData() {
         localStorage.setItem('freshstock_fruits', JSON.stringify(allFruits));
         localStorage.setItem('freshstock_sales', JSON.stringify(allSalesData));
         localStorage.setItem('freshstock_repayments', JSON.stringify(allRepaymentsData));
+        localStorage.setItem('freshstock_history', JSON.stringify(allHistoryData));
     } catch(e) {
         console.error("LocalStorage write error:", e);
     }
@@ -290,24 +328,51 @@ async function logAction(action, detail) {
 }
 
 function addLocalHistoryEntry(action, detail) {
+    const dateStr = new Date().toLocaleString('fr-FR', {day: '2-digit', month: '2-digit', hour: '2-digit', minute:'2-digit'});
+    const newEntry = {
+        id: "hist_" + Date.now(),
+        action: action,
+        detail: detail,
+        createdAtStr: dateStr,
+        createdAt: new Date()
+    };
+    allHistoryData.unshift(newEntry);
+    saveLocalStorageData();
+    renderHistoryTable();
+}
+
+function renderHistoryTable() {
     const tbody = document.getElementById('history-list');
     if(!tbody) return;
-    const dateStr = new Date().toLocaleString('fr-FR', {day: '2-digit', month: '2-digit', hour: '2-digit', minute:'2-digit'});
-    
-    let color = "var(--text-main)";
-    if(action === "AJOUT") color = "var(--primary)";
-    if(action === "MODIFICATION") color = "var(--accent-blue)";
-    if(action === "VENTE") color = "var(--accent-orange)";
-    if(action === "ANNULATION VENTE" || action === "SUPPRESSION" || action === "PERTE") color = "var(--accent-red)";
-    if(action === "RÈGLEMENT DETTE") color = "var(--primary)";
+    tbody.innerHTML = '';
 
-    const tr = document.createElement('tr');
-    tr.innerHTML = `
-        <td>${dateStr}</td>
-        <td><strong style="color: ${color}">${action}</strong></td>
-        <td>${detail}</td>
-    `;
-    tbody.insertBefore(tr, tbody.firstChild);
+    if (!allHistoryData || allHistoryData.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 20px;">Aucune action enregistrée pour l'instant.</td></tr>`;
+        return;
+    }
+
+    allHistoryData.forEach(item => {
+        let dateStr = item.createdAtStr;
+        if (!dateStr) {
+            const d = parseDate(item.createdAt);
+            dateStr = d.toLocaleString('fr-FR', {day: '2-digit', month: '2-digit', hour: '2-digit', minute:'2-digit'});
+        }
+
+        let color = "var(--text-main)";
+        if(item.action === "AJOUT") color = "var(--primary)";
+        if(item.action === "MODIFICATION") color = "var(--accent-blue)";
+        if(item.action === "VENTE") color = "var(--accent-orange)";
+        if(item.action === "ANNULATION VENTE" || item.action === "SUPPRESSION" || item.action === "PERTE") color = "var(--accent-red)";
+        if(item.action === "RÈGLEMENT DETTE") color = "var(--primary)";
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${dateStr}</td>
+            <td><strong style="color: ${color}">${item.action}</strong></td>
+            <td>${item.detail}</td>
+        `;
+        tbody.appendChild(tr);
+    });
 }
 
 // ---------------- NAV LOGIC ----------------
@@ -334,6 +399,7 @@ function initRealtimeUpdates() {
     updateStatsAndReports();
     updatePOSSelect();
     renderRecentSalesTable();
+    renderHistoryTable();
 
     // 1. Écoute des fruits (Firestore Sync)
     const qFruits = query(fruitsCollection, orderBy('createdAt', 'desc'));
@@ -372,28 +438,18 @@ function initRealtimeUpdates() {
     // 3. Écoute de l'historique général
     const qHistory = query(historyCollection, orderBy('createdAt', 'desc'));
     onSnapshot(qHistory, (snapshot) => {
-        const tbody = document.getElementById('history-list');
-        if(!tbody) return;
-        tbody.innerHTML = '';
-        snapshot.forEach(docSnapshot => {
-            const item = docSnapshot.data();
-            const dateStr = item.createdAt ? new Date(item.createdAt.toDate()).toLocaleString('fr-FR', {day: '2-digit', month: '2-digit', hour: '2-digit', minute:'2-digit'}) : "À l'instant";
-            
-            let color = "var(--text-main)";
-            if(item.action === "AJOUT") color = "var(--primary)";
-            if(item.action === "MODIFICATION") color = "var(--accent-blue)";
-            if(item.action === "VENTE") color = "var(--accent-orange)";
-            if(item.action === "ANNULATION VENTE") color = "var(--accent-red)";
-            if(item.action === "SUPPRESSION") color = "var(--accent-red)";
-
-            const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td>${dateStr}</td>
-                <td><strong style="color: ${color}">${item.action}</strong></td>
-                <td>${item.detail}</td>
-            `;
-            tbody.appendChild(tr);
-        });
+        if (snapshot.docs.length > 0) {
+            allHistoryData = [];
+            snapshot.forEach(docSnapshot => {
+                const item = docSnapshot.data();
+                allHistoryData.push({ id: docSnapshot.id, ...item });
+            });
+            saveLocalStorageData();
+        }
+        renderHistoryTable();
+    }, (err) => {
+        console.warn("Écouteur Firestore historique inaccessible, utilisation des données locales:", err);
+        renderHistoryTable();
     });
 
     // 4. Écoute des Ventes (POS Sync)
