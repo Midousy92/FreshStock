@@ -10,77 +10,61 @@ service cloud.firestore {
       return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
-    function userProfile() {
+    function getUser() {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
 
-    function isMemberOf(storeId) {
-      return hasProfile() && userProfile().storeId == storeId;
+    function isMember(storeId) {
+      return hasProfile() && getUser().storeId == storeId;
     }
 
-    function isStoreAdmin() {
-      return hasProfile() && userProfile().role == 'admin';
+    function isAdmin() {
+      return hasProfile() && getUser().role == 'admin';
     }
 
-    // 1. Profils utilisateurs (users)
+    // 1. Profils utilisateurs
     match /users/{userId} {
-      allow read: if isSignedIn() && (
-        request.auth.uid == userId || 
-        (hasProfile() && userProfile().storeId == resource.data.storeId)
-      );
-      allow create: if isSignedIn() && (
-        request.auth.uid == userId || 
-        isStoreAdmin()
-      );
-      allow update: if isSignedIn() && (
-        (request.auth.uid == userId && request.resource.data.role == resource.data.role) ||
-        (isStoreAdmin() && userProfile().storeId == resource.data.storeId)
-      );
-      allow delete: if isStoreAdmin() && request.auth.uid != userId && userProfile().storeId == resource.data.storeId;
+      allow read: if isSignedIn() && (request.auth.uid == userId || (hasProfile() && getUser().storeId == resource.data.storeId));
+      allow create: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow update: if isSignedIn() && ((request.auth.uid == userId && request.resource.data.role == resource.data.role) || (isAdmin() && getUser().storeId == resource.data.storeId));
+      allow delete: if isAdmin() && request.auth.uid != userId && getUser().storeId == resource.data.storeId;
     }
 
-    // 2. Boutiques (stores)
+    // 2. Boutiques
     match /stores/{storeId} {
-      allow read: if isSignedIn() && (
-        (resource.data.ownerUid == request.auth.uid) ||
-        isMemberOf(storeId)
-      );
+      allow read: if isSignedIn() && (resource.data.ownerUid == request.auth.uid || isMember(storeId));
       allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
-      // Empêche l'auto-attribution du plan Pro côté client
-      allow update: if isSignedIn() && 
-        resource.data.ownerUid == request.auth.uid && 
-        request.resource.data.plan == resource.data.plan;
+      allow update: if isSignedIn() && resource.data.ownerUid == request.auth.uid && request.resource.data.plan == resource.data.plan;
       allow delete: if false;
     }
 
-    // 3. Stocks de fruits (fruits)
+    // 3. Stocks de fruits
     match /fruits/{fruitId} {
-      allow read: if isSignedIn() && isMemberOf(resource.data.storeId);
-      allow create: if isSignedIn() && isMemberOf(request.resource.data.storeId) && isStoreAdmin();
-      // Caissiers peuvent mettre à jour soldQuantity lors d'une vente
-      allow update: if isSignedIn() && isMemberOf(resource.data.storeId);
-      allow delete: if isSignedIn() && isMemberOf(resource.data.storeId) && isStoreAdmin();
+      allow read: if isSignedIn() && isMember(resource.data.storeId);
+      allow create: if isSignedIn() && isMember(request.resource.data.storeId) && isAdmin();
+      allow update: if isSignedIn() && isMember(resource.data.storeId);
+      allow delete: if isSignedIn() && isMember(resource.data.storeId) && isAdmin();
     }
 
-    // 4. Ventes (sales)
+    // 4. Ventes
     match /sales/{saleId} {
-      allow read: if isSignedIn() && isMemberOf(resource.data.storeId);
-      allow create: if isSignedIn() && isMemberOf(request.resource.data.storeId);
-      allow update, delete: if isSignedIn() && isMemberOf(resource.data.storeId) && isStoreAdmin();
+      allow read: if isSignedIn() && isMember(resource.data.storeId);
+      allow create: if isSignedIn() && isMember(request.resource.data.storeId);
+      allow update, delete: if isSignedIn() && isMember(resource.data.storeId) && isAdmin();
     }
 
-    // 5. Règlements de dettes (repayments)
+    // 5. Règlements de dettes
     match /repayments/{repId} {
-      allow read: if isSignedIn() && isMemberOf(resource.data.storeId);
-      allow create: if isSignedIn() && isMemberOf(request.resource.data.storeId);
-      allow update, delete: if isSignedIn() && isMemberOf(resource.data.storeId) && isStoreAdmin();
+      allow read: if isSignedIn() && isMember(resource.data.storeId);
+      allow create: if isSignedIn() && isMember(request.resource.data.storeId);
+      allow update, delete: if isSignedIn() && isMember(resource.data.storeId) && isAdmin();
     }
 
-    // 6. Historique (Journal d'audit immuable)
+    // 6. Historique (Audit)
     match /history/{histId} {
-      allow read: if isSignedIn() && isMemberOf(resource.data.storeId);
-      allow create: if isSignedIn() && isMemberOf(request.resource.data.storeId);
-      allow update, delete: if false; // Jamais effaçable ni modifiable
+      allow read: if isSignedIn() && isMember(resource.data.storeId);
+      allow create: if isSignedIn() && isMember(request.resource.data.storeId);
+      allow update, delete: if false;
     }
   }
 }
