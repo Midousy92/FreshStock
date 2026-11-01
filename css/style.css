@@ -489,6 +489,41 @@ body {
     background: white;
 }
 
+.password-input-wrapper {
+    position: relative;
+    width: 100%;
+    display: flex;
+    align-items: center;
+}
+
+.password-input-wrapper input {
+    width: 100%;
+    padding-right: 44px;
+}
+
+.password-toggle-btn {
+    position: absolute;
+    right: 12px;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 4px;
+    transition: color 0.2s, transform 0.1s;
+}
+
+.password-toggle-btn:hover {
+    color: var(--primary);
+}
+
+.password-toggle-btn:active {
+    transform: scale(0.92);
+}
+
 .form-actions {
     display: flex;
     justify-content: flex-end;

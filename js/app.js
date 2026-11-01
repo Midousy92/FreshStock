@@ -1390,6 +1390,21 @@ function initAuth() {
     // Nettoyer toute trace de session démo antérieure
     localStorage.removeItem('freshstock_demo_user');
 
+    // Afficher ou masquer le mot de passe
+    const togglePasswordBtn = document.getElementById('togglePasswordBtn');
+    const loginPasswordInput = document.getElementById('loginPassword');
+    const togglePasswordIcon = document.getElementById('togglePasswordIcon');
+    if (togglePasswordBtn && loginPasswordInput && togglePasswordIcon) {
+        togglePasswordBtn.addEventListener('click', () => {
+            const isPassword = loginPasswordInput.type === 'password';
+            loginPasswordInput.type = isPassword ? 'text' : 'password';
+            togglePasswordIcon.className = isPassword ? 'bx bx-hide' : 'bx bx-show';
+            const actionText = isPassword ? "Masquer le mot de passe" : "Afficher le mot de passe";
+            togglePasswordBtn.setAttribute('title', actionText);
+            togglePasswordBtn.setAttribute('aria-label', actionText);
+        });
+    }
+
     // Écouteur d'état d'authentification
     onAuthStateChanged(auth, (user) => {
         const loginScreen = document.getElementById('login-screen');
