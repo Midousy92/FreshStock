@@ -1462,10 +1462,16 @@ function initAuth() {
                     msg = "Aucun compte n'est associé à cette adresse email.";
                 } else if (error.code === 'auth/invalid-email') {
                     msg = "Adresse email invalide.";
+                } else if (error.code === 'auth/unauthorized-domain') {
+                    msg = "Ce domaine web n'est pas autorisé dans la console Firebase (Authentication > Paramètres > Domaines autorisés).";
+                } else if (error.code === 'auth/operation-not-allowed') {
+                    msg = "La réinitialisation par email n'est pas activée sur la console Firebase.";
                 } else if (error.code === 'auth/too-many-requests') {
                     msg = "Trop de tentatives. Veuillez patienter avant de réessayer.";
                 } else if (error.code === 'auth/network-request-failed') {
                     msg = "Erreur réseau. Vérifiez votre connexion internet.";
+                } else {
+                    msg = `Erreur (${error.code || 'inconnue'}) : ${error.message || "Impossible d'envoyer l'email."}`;
                 }
                 if (resetMessage) {
                     resetMessage.textContent = msg;
