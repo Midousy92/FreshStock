@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
 import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, serverTimestamp, query, orderBy, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
 // TODO: Remplacez ces valeurs par celles de votre projet Firebase
 const firebaseConfig = {
@@ -1405,6 +1405,81 @@ function initAuth() {
         });
     }
 
+    // Gestion du basculement Vue Connexion <-> Mot de passe oublié
+    const loginView = document.getElementById('loginView');
+    const forgotPasswordView = document.getElementById('forgotPasswordView');
+    const btnForgotPass = document.getElementById('btnForgotPass');
+    const btnBackToLogin = document.getElementById('btnBackToLogin');
+    const resetEmailInput = document.getElementById('resetEmail');
+    const resetMessage = document.getElementById('resetMessage');
+    const forgotPasswordForm = document.getElementById('forgotPasswordForm');
+    const resetPassBtn = document.getElementById('resetPassBtn');
+
+    if (btnForgotPass && loginView && forgotPasswordView) {
+        btnForgotPass.addEventListener('click', () => {
+            const currentEmail = document.getElementById('loginEmail')?.value.trim();
+            if (currentEmail && resetEmailInput) {
+                resetEmailInput.value = currentEmail;
+            }
+            if (resetMessage) resetMessage.style.display = 'none';
+            loginView.style.display = 'none';
+            forgotPasswordView.style.display = 'block';
+            if (resetEmailInput) resetEmailInput.focus();
+        });
+    }
+
+    if (btnBackToLogin && loginView && forgotPasswordView) {
+        btnBackToLogin.addEventListener('click', () => {
+            if (resetMessage) resetMessage.style.display = 'none';
+            forgotPasswordView.style.display = 'none';
+            loginView.style.display = 'block';
+        });
+    }
+
+    if (forgotPasswordForm) {
+        forgotPasswordForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = resetEmailInput ? resetEmailInput.value.trim() : "";
+            if (!email) return;
+
+            resetPassBtn.textContent = "Envoi...";
+            resetPassBtn.disabled = true;
+            if (resetMessage) resetMessage.style.display = 'none';
+
+            try {
+                await sendPasswordResetEmail(auth, email);
+                if (resetMessage) {
+                    resetMessage.textContent = "Un email de réinitialisation a été envoyé à votre adresse. Veuillez vérifier votre boîte de réception.";
+                    resetMessage.style.color = "#065f46";
+                    resetMessage.style.background = "rgba(16, 185, 129, 0.15)";
+                    resetMessage.style.display = 'block';
+                }
+                forgotPasswordForm.reset();
+            } catch (error) {
+                console.error("Erreur réinitialisation mot de passe:", error);
+                let msg = "Une erreur est survenue lors de l'envoi de l'email.";
+                if (error.code === 'auth/user-not-found') {
+                    msg = "Aucun compte n'est associé à cette adresse email.";
+                } else if (error.code === 'auth/invalid-email') {
+                    msg = "Adresse email invalide.";
+                } else if (error.code === 'auth/too-many-requests') {
+                    msg = "Trop de tentatives. Veuillez patienter avant de réessayer.";
+                } else if (error.code === 'auth/network-request-failed') {
+                    msg = "Erreur réseau. Vérifiez votre connexion internet.";
+                }
+                if (resetMessage) {
+                    resetMessage.textContent = msg;
+                    resetMessage.style.color = "var(--accent-red)";
+                    resetMessage.style.background = "rgba(239, 68, 68, 0.1)";
+                    resetMessage.style.display = 'block';
+                }
+            } finally {
+                resetPassBtn.textContent = "Envoyer le lien";
+                resetPassBtn.disabled = false;
+            }
+        });
+    }
+
     // Écouteur d'état d'authentification
     onAuthStateChanged(auth, (user) => {
         const loginScreen = document.getElementById('login-screen');
@@ -1416,6 +1491,8 @@ function initAuth() {
             const emailLabel = document.getElementById('currentUserEmail');
             if(emailLabel) emailLabel.textContent = user.email ? user.email.split('@')[0] : "Admin";
         } else {
+            if(forgotPasswordView) forgotPasswordView.style.display = 'none';
+            if(loginView) loginView.style.display = 'block';
             loginScreen.style.display = 'flex';
             appContainer.style.display = 'none';
         }
@@ -1457,6 +1534,8 @@ function initAuth() {
     if(logoutBtn) {
         logoutBtn.addEventListener('click', () => {
             signOut(auth);
+            if(forgotPasswordView) forgotPasswordView.style.display = 'none';
+            if(loginView) loginView.style.display = 'block';
             document.getElementById('login-screen').style.display = 'flex';
             document.getElementById('app-container').style.display = 'none';
         });

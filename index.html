@@ -19,26 +19,54 @@
     <div id="login-screen" style="display: flex; height: 100vh; justify-content: center; align-items: center; background: var(--bg-color);">
         <div class="glass" style="padding: 40px; width: 90%; max-width: 400px; text-align: center;">
             <i class='bx bxs-lemon' style="font-size: 60px; color: var(--primary); margin-bottom: 20px;"></i>
-            <h2 style="margin-bottom: 20px; color: var(--text-main);">Connexion FreshStock</h2>
-            <form id="loginForm" class="fruit-form">
-                <div class="form-group" style="text-align: left;">
-                    <label>Adresse Email</label>
-                    <input type="email" id="loginEmail" required placeholder="admin@freshstock.com">
-                </div>
-                <div class="form-group" style="text-align: left; margin-top: 15px;">
-                    <label for="loginPassword">Mot de passe</label>
-                    <div class="password-input-wrapper">
-                        <input type="password" id="loginPassword" required placeholder="••••••••">
-                        <button type="button" id="togglePasswordBtn" class="password-toggle-btn" title="Afficher le mot de passe" aria-label="Afficher le mot de passe">
-                            <i class='bx bx-show' id="togglePasswordIcon"></i>
-                        </button>
+            
+            <!-- Vue Connexion -->
+            <div id="loginView">
+                <h2 style="margin-bottom: 20px; color: var(--text-main);">Connexion FreshStock</h2>
+                <form id="loginForm" class="fruit-form">
+                    <div class="form-group" style="text-align: left;">
+                        <label for="loginEmail">Adresse Email</label>
+                        <input type="email" id="loginEmail" required placeholder="admin@freshstock.com">
                     </div>
-                </div>
-                <button type="submit" class="btn-primary" id="loginBtn" style="width: 100%; justify-content: center; margin-top: 25px; padding: 12px; font-size: 16px;">
-                    Se Connecter
-                </button>
-            </form>
-            <p id="loginError" style="color: var(--accent-red); margin-top: 15px; display: none; font-size: 14px; background: rgba(239, 68, 68, 0.1); padding: 10px; border-radius: 8px;"></p>
+                    <div class="form-group" style="text-align: left; margin-top: 15px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <label for="loginPassword" style="margin-bottom: 0;">Mot de passe</label>
+                            <button type="button" id="btnForgotPass" class="forgot-pass-link">Mot de passe oublié ?</button>
+                        </div>
+                        <div class="password-input-wrapper">
+                            <input type="password" id="loginPassword" required placeholder="••••••••">
+                            <button type="button" id="togglePasswordBtn" class="password-toggle-btn" title="Afficher le mot de passe" aria-label="Afficher le mot de passe">
+                                <i class='bx bx-show' id="togglePasswordIcon"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <button type="submit" class="btn-primary" id="loginBtn" style="width: 100%; justify-content: center; margin-top: 25px; padding: 12px; font-size: 16px;">
+                        Se Connecter
+                    </button>
+                </form>
+                <p id="loginError" style="color: var(--accent-red); margin-top: 15px; display: none; font-size: 14px; background: rgba(239, 68, 68, 0.1); padding: 10px; border-radius: 8px;"></p>
+            </div>
+
+            <!-- Vue Mot de passe oublié -->
+            <div id="forgotPasswordView" style="display: none;">
+                <h2 style="margin-bottom: 10px; color: var(--text-main);">Mot de passe oublié</h2>
+                <p style="font-size: 14px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5;">
+                    Saisissez votre adresse email pour recevoir un lien sécurisé de réinitialisation.
+                </p>
+                <form id="forgotPasswordForm" class="fruit-form">
+                    <div class="form-group" style="text-align: left;">
+                        <label for="resetEmail">Adresse Email</label>
+                        <input type="email" id="resetEmail" required placeholder="admin@freshstock.com">
+                    </div>
+                    <button type="submit" class="btn-primary" id="resetPassBtn" style="width: 100%; justify-content: center; margin-top: 20px; padding: 12px; font-size: 16px;">
+                        Envoyer le lien
+                    </button>
+                    <button type="button" id="btnBackToLogin" class="back-to-login-btn">
+                        <i class='bx bx-arrow-back'></i> Retour à la connexion
+                    </button>
+                </form>
+                <p id="resetMessage" style="margin-top: 15px; display: none; font-size: 14px; padding: 10px; border-radius: 8px;"></p>
+            </div>
         </div>
     </div>
 
