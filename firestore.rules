@@ -1,10 +1,86 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Règles de sécurité pour FreshStock Pro
-    // Autorise la lecture et l'écriture uniquement aux utilisateurs authentifiés
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function hasProfile() {
+      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
+    }
+
+    function userProfile() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
+    function isMemberOf(storeId) {
+      return hasProfile() && userProfile().storeId == storeId;
+    }
+
+    function isStoreAdmin() {
+      return hasProfile() && userProfile().role == 'admin';
+    }
+
+    // 1. Profils utilisateurs (users)
+    match /users/{userId} {
+      allow read: if isSignedIn() && (
+        request.auth.uid == userId || 
+        (hasProfile() && userProfile().storeId == resource.data.storeId)
+      );
+      allow create: if isSignedIn() && (
+        request.auth.uid == userId || 
+        isStoreAdmin()
+      );
+      allow update: if isSignedIn() && (
+        (request.auth.uid == userId && request.resource.data.role == resource.data.role) ||
+        (isStoreAdmin() && userProfile().storeId == resource.data.storeId)
+      );
+      allow delete: if isStoreAdmin() && request.auth.uid != userId && userProfile().storeId == resource.data.storeId;
+    }
+
+    // 2. Boutiques (stores)
+    match /stores/{storeId} {
+      allow read: if isSignedIn() && (
+        (resource.data.ownerUid == request.auth.uid) ||
+        isMemberOf(storeId)
+      );
+      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
+      // Empêche l'auto-attribution du plan Pro côté client
+      allow update: if isSignedIn() && 
+        resource.data.ownerUid == request.auth.uid && 
+        request.resource.data.plan == resource.data.plan;
+      allow delete: if false;
+    }
+
+    // 3. Stocks de fruits (fruits)
+    match /fruits/{fruitId} {
+      allow read: if isSignedIn() && isMemberOf(resource.data.storeId);
+      allow create: if isSignedIn() && isMemberOf(request.resource.data.storeId) && isStoreAdmin();
+      // Caissiers peuvent mettre à jour soldQuantity lors d'une vente
+      allow update: if isSignedIn() && isMemberOf(resource.data.storeId);
+      allow delete: if isSignedIn() && isMemberOf(resource.data.storeId) && isStoreAdmin();
+    }
+
+    // 4. Ventes (sales)
+    match /sales/{saleId} {
+      allow read: if isSignedIn() && isMemberOf(resource.data.storeId);
+      allow create: if isSignedIn() && isMemberOf(request.resource.data.storeId);
+      allow update, delete: if isSignedIn() && isMemberOf(resource.data.storeId) && isStoreAdmin();
+    }
+
+    // 5. Règlements de dettes (repayments)
+    match /repayments/{repId} {
+      allow read: if isSignedIn() && isMemberOf(resource.data.storeId);
+      allow create: if isSignedIn() && isMemberOf(request.resource.data.storeId);
+      allow update, delete: if isSignedIn() && isMemberOf(resource.data.storeId) && isStoreAdmin();
+    }
+
+    // 6. Historique (Journal d'audit immuable)
+    match /history/{histId} {
+      allow read: if isSignedIn() && isMemberOf(resource.data.storeId);
+      allow create: if isSignedIn() && isMemberOf(request.resource.data.storeId);
+      allow update, delete: if false; // Jamais effaçable ni modifiable
     }
   }
 }

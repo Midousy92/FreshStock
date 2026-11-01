@@ -42,6 +42,16 @@ function formatCurrency(amount) {
     return (amount || 0).toLocaleString('fr-FR') + " " + curr;
 }
 
+function escapeHTML(str) {
+    if (str === null || str === undefined) return '';
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+}
+
 function getStoreKey(baseKey) {
     return currentStoreId ? `${baseKey}_${currentStoreId}` : baseKey;
 }
@@ -290,9 +300,9 @@ function renderHistoryTable() {
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td>${dateStr}</td>
-            <td><strong style="color: ${color}">${item.action}</strong></td>
-            <td>${item.detail}</td>
+            <td>${escapeHTML(dateStr)}</td>
+            <td><strong style="color: ${color}">${escapeHTML(item.action)}</strong></td>
+            <td>${escapeHTML(item.detail)}</td>
         `;
         tbody.appendChild(tr);
     });
@@ -439,13 +449,13 @@ function renderRecentSalesTable() {
         
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td>${dateStr}</td>
+            <td>${escapeHTML(dateStr)}</td>
             <td>
-                <strong>${sale.clientName}</strong><br>
-                <small style="color: var(--text-muted);">${sale.clientPhone}</small>
+                <strong>${escapeHTML(sale.clientName)}</strong><br>
+                <small style="color: var(--text-muted);">${escapeHTML(sale.clientPhone)}</small>
             </td>
-            <td>${sale.fruitName}</td>
-            <td><span class="status-badge" style="background: rgba(255,255,255,0.15); color: var(--text-main); font-weight: 500;">${sale.paymentMethod || 'Espèces'}</span></td>
+            <td>${escapeHTML(sale.fruitName)}</td>
+            <td><span class="status-badge" style="background: rgba(255,255,255,0.15); color: var(--text-main); font-weight: 500;">${escapeHTML(sale.paymentMethod || 'Espèces')}</span></td>
             <td><strong>${formatCurrency(sale.totalPrice || 0)}</strong></td>
             <td>
                 <div class="action-btns">
@@ -705,7 +715,7 @@ function updateStatsAndReports() {
     const bestSellerEl = document.getElementById('report-best-seller');
     if (bestSellerEl) {
         if (topSalesArray.length > 0) {
-            bestSellerEl.innerHTML = `${topSalesArray[0].name}<br><span style="color: var(--text-muted); font-size:14px; font-weight: normal;">${formatCurrency(topSalesArray[0].revenue)}</span>`;
+            bestSellerEl.innerHTML = `${escapeHTML(topSalesArray[0].name)}<br><span style="color: var(--text-muted); font-size:14px; font-weight: normal;">${formatCurrency(topSalesArray[0].revenue)}</span>`;
         } else {
             bestSellerEl.textContent = "-";
         }
@@ -718,7 +728,7 @@ function updateStatsAndReports() {
             const tr = document.createElement('tr');
             const medal = index === 0 ? "🥇 " : index === 1 ? "🥈 " : index === 2 ? "🥉 " : "";
             tr.innerHTML = `
-                <td><strong>${medal}${item.name}</strong></td>
+                <td><strong>${medal}${escapeHTML(item.name)}</strong></td>
                 <td>${item.qty} kg</td>
                 <td><strong style="color: var(--primary);">${formatCurrency(item.revenue)}</strong></td>
             `;
@@ -783,10 +793,10 @@ function renderClientsTable() {
 
         const tr = document.createElement('tr');
         tr.innerHTML = `
-            <td><strong>${c.name}</strong></td>
-            <td>${c.phone}</td>
-            <td><span style="color: var(--text-muted);">${c.address}</span></td>
-            <td><span class="status-badge status-good">${c.purchaseCount} commande(s)</span></td>
+            <td><strong>${escapeHTML(c.name)}</strong></td>
+            <td>${escapeHTML(c.phone)}</td>
+            <td><span style="color: var(--text-muted);">${escapeHTML(c.address)}</span></td>
+            <td><span class="status-badge status-good">${parseInt(c.purchaseCount) || 0} commande(s)</span></td>
             <td><strong style="color: var(--primary);">${formatCurrency(c.totalSpent)}</strong></td>
             <td>
                 ${netDebt > 0 ? `<strong style="color: var(--accent-red);">${formatCurrency(netDebt)}</strong>` : `<span style="color: var(--primary); font-size: 13px;">${formatCurrency(0)} (À jour)</span>`}
@@ -795,7 +805,7 @@ function renderClientsTable() {
                 <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
                     ${cleanPhone ? `<a href="${waLink}" target="_blank" class="btn-icon" style="color: #25D366; text-decoration: none;" title="Discuter sur WhatsApp"><i class='bx bxl-whatsapp' style="font-size: 22px;"></i></a>` : ''}
                     ${netDebt > 0 && cleanPhone ? `<a href="${waRelanceLink}" target="_blank" class="btn-primary" style="padding: 5px 10px; font-size: 11px; background: #25D366; color: white; text-decoration: none; font-weight: 600; display: inline-flex; align-items: center; gap: 4px;" title="Envoyer un rappel de règlement par WhatsApp"><i class='bx bxl-whatsapp'></i> Relancer</a>` : ''}
-                    ${netDebt > 0 ? `<button class="btn-primary pay-debt-btn" data-name="${c.name}" data-phone="${c.phone}" data-debt="${netDebt}" style="padding: 5px 10px; font-size: 11px; background: var(--primary); font-weight: 600;" title="Enregistrer un versement"><i class='bx bx-wallet'></i> Régler</button>` : ''}
+                    ${netDebt > 0 ? `<button class="btn-primary pay-debt-btn" data-name="${escapeHTML(c.name)}" data-phone="${escapeHTML(c.phone)}" data-debt="${netDebt}" style="padding: 5px 10px; font-size: 11px; background: var(--primary); font-weight: 600;" title="Enregistrer un versement"><i class='bx bx-wallet'></i> Régler</button>` : ''}
                 </div>
             </td>
         `;
@@ -844,10 +854,10 @@ function renderTable() {
             <td>
                 <div class="product-cell">
                     ${renderFruitIconHTML(item)}
-                    <span>${item.name}</span>
+                    <span>${escapeHTML(item.name)}</span>
                 </div>
             </td>
-            <td>${item.origin}</td>
+            <td>${escapeHTML(item.origin)}</td>
             <td><strong>${formatCurrency(item.price || 0)}</strong></td>
             <td style="color: var(--text-muted);">${initialQty} kg</td>
             <td style="color: var(--accent-orange); font-weight: 500;">${soldQty} kg</td>
@@ -2221,17 +2231,20 @@ function renderTeamTable() {
             dateStr = d.toLocaleDateString('fr-FR');
         }
 
+        const displayName = escapeHTML(member.displayName || member.email.split('@')[0]);
+        const email = escapeHTML(member.email || '');
+
         tr.innerHTML = `
             <td>
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(member.displayName || member.email)}&background=10b981&color=fff" style="width: 32px; height: 32px; border-radius: 50%;">
-                    <strong>${member.displayName || member.email.split('@')[0]}</strong>
+                    <strong>${displayName}</strong>
                 </div>
             </td>
-            <td>${member.email}</td>
+            <td>${email}</td>
             <td><span class="role-pill ${roleClass}">${roleName}</span></td>
             <td><small style="color: var(--text-muted);">${permText}</small></td>
-            <td>${dateStr || '-'}</td>
+            <td>${escapeHTML(dateStr || '-')}</td>
         `;
         tbody.appendChild(tr);
     });
