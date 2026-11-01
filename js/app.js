@@ -26,154 +26,49 @@ let allSalesData = [];
 let allRepaymentsData = [];
 let allHistoryData = [];
 
-const DEFAULT_DEMO_FRUITS = [
-    {
-        id: "demo_1",
-        name: "Mangues Kent",
-        image: "🥭",
-        origin: "Mbour, Sénégal",
-        buyPrice: 350,
-        price: 600,
-        quantity: "500 kg",
-        initialQuantity: 500,
-        soldQuantity: 120,
-        minQuantity: 50,
-        date: "2026-09-01",
-        status: "good",
-        statusText: "En stock"
-    },
-    {
-        id: "demo_2",
-        name: "Banane Bio",
-        image: "🍌",
-        origin: "Tambacounda",
-        buyPrice: 300,
-        price: 500,
-        quantity: "300 kg",
-        initialQuantity: 300,
-        soldQuantity: 80,
-        minQuantity: 30,
-        date: "2026-09-02",
-        status: "good",
-        statusText: "En stock"
-    },
-    {
-        id: "demo_3",
-        name: "Pomme Granny Smith",
-        image: "🍏",
-        origin: "Import (France)",
-        buyPrice: 700,
-        price: 1200,
-        quantity: "200 kg",
-        initialQuantity: 200,
-        soldQuantity: 185,
-        minQuantity: 40,
-        date: "2026-08-28",
-        status: "warning",
-        statusText: "Stock Bas"
-    },
-    {
-        id: "demo_4",
-        name: "Orange Valencia",
-        image: "🍊",
-        origin: "Maroc",
-        buyPrice: 400,
-        price: 750,
-        quantity: "400 kg",
-        initialQuantity: 400,
-        soldQuantity: 400,
-        minQuantity: 50,
-        date: "2026-08-20",
-        status: "danger",
-        statusText: "Épuisé"
-    }
-];
-
-const DEFAULT_DEMO_SALES = [
-    {
-        id: "sale_demo_1",
-        clientName: "Mamadou Diallo",
-        clientPhone: "771234567",
-        clientAddress: "Médina, Dakar",
-        fruitName: "Mangues Kent",
-        qty: 50,
-        pricePerKg: 600,
-        totalPrice: 30000,
-        paymentMethod: "Espèces",
-        createdAtStr: "04/09/2026 14:30"
-    },
-    {
-        id: "sale_demo_2",
-        clientName: "Fatou Sow",
-        clientPhone: "789876543",
-        clientAddress: "Almadies",
-        fruitName: "Banane Bio",
-        qty: 30,
-        pricePerKg: 500,
-        totalPrice: 15000,
-        paymentMethod: "Crédit / Dette",
-        createdAtStr: "05/09/2026 10:15"
-    }
-];
-
-const DEFAULT_DEMO_HISTORY = [
-    {
-        id: "hist_demo_1",
-        action: "VENTE",
-        detail: "Vente de 30 kg de Banane Bio au client Fatou Sow",
-        createdAtStr: "05/09/2026 10:15"
-    },
-    {
-        id: "hist_demo_2",
-        action: "VENTE",
-        detail: "Vente de 50 kg de Mangues Kent au client Mamadou Diallo",
-        createdAtStr: "04/09/2026 14:30"
-    },
-    {
-        id: "hist_demo_3",
-        action: "AJOUT",
-        detail: "Arrivage de 300 kg de Banane Bio enregistré (Origine: Tambacounda)",
-        createdAtStr: "02/09/2026 09:00"
-    },
-    {
-        id: "hist_demo_4",
-        action: "AJOUT",
-        detail: "Arrivage de 500 kg de Mangues Kent enregistré (Origine: Mbour, Sénégal)",
-        createdAtStr: "01/09/2026 08:30"
-    }
-];
-
 function loadLocalStorageData() {
+    // Purge de l'éventuelle clé démo résiduelle
+    localStorage.removeItem('freshstock_demo_user');
+
     const savedFruits = localStorage.getItem('freshstock_fruits');
     if (savedFruits) {
-        try { allFruits = JSON.parse(savedFruits); } catch(e) {}
-    }
-    if (!allFruits || allFruits.length === 0) {
-        allFruits = [...DEFAULT_DEMO_FRUITS];
-        saveLocalStorageData();
+        try { 
+            const parsed = JSON.parse(savedFruits);
+            // Filtrer les anciens éléments de démonstration
+            allFruits = Array.isArray(parsed) ? parsed.filter(f => !f.id || !f.id.toString().startsWith('demo_')) : [];
+        } catch(e) { allFruits = []; }
+    } else {
+        allFruits = [];
     }
 
     const savedSales = localStorage.getItem('freshstock_sales');
     if (savedSales) {
-        try { allSalesData = JSON.parse(savedSales); } catch(e) {}
-    }
-    if (!allSalesData || allSalesData.length === 0) {
-        allSalesData = [...DEFAULT_DEMO_SALES];
-        saveLocalStorageData();
+        try { 
+            const parsed = JSON.parse(savedSales);
+            allSalesData = Array.isArray(parsed) ? parsed.filter(s => !s.id || !s.id.toString().startsWith('sale_demo_')) : [];
+        } catch(e) { allSalesData = []; }
+    } else {
+        allSalesData = [];
     }
 
     const savedRepayments = localStorage.getItem('freshstock_repayments');
     if (savedRepayments) {
-        try { allRepaymentsData = JSON.parse(savedRepayments); } catch(e) {}
+        try { 
+            const parsed = JSON.parse(savedRepayments);
+            allRepaymentsData = Array.isArray(parsed) ? parsed : [];
+        } catch(e) { allRepaymentsData = []; }
+    } else {
+        allRepaymentsData = [];
     }
 
     const savedHistory = localStorage.getItem('freshstock_history');
     if (savedHistory) {
-        try { allHistoryData = JSON.parse(savedHistory); } catch(e) {}
-    }
-    if (!allHistoryData || allHistoryData.length === 0) {
-        allHistoryData = [...DEFAULT_DEMO_HISTORY];
-        saveLocalStorageData();
+        try { 
+            const parsed = JSON.parse(savedHistory);
+            allHistoryData = Array.isArray(parsed) ? parsed.filter(h => !h.id || !h.id.toString().startsWith('hist_demo_')) : [];
+        } catch(e) { allHistoryData = []; }
+    } else {
+        allHistoryData = [];
     }
 }
 
@@ -312,7 +207,7 @@ function printPriceTag(fruit) {
 // Fonction pour enregistrer une action dans l'historique
 async function logAction(action, detail) {
     try {
-        if (auth.currentUser && !window.isDemoMode) {
+        if (auth.currentUser) {
             await addDoc(historyCollection, {
                 action: action,
                 detail: detail,
@@ -393,7 +288,7 @@ function initNavigation() {
 
 // ---------------- REALTIME & PERSISTENCE ----------------
 function initRealtimeUpdates() {
-    // 0. Charger immédiatement le cache localStorage et les données démo par défaut
+    // 0. Charger immédiatement le cache localStorage
     loadLocalStorageData();
     renderTable();
     updateStatsAndReports();
@@ -404,13 +299,11 @@ function initRealtimeUpdates() {
     // 1. Écoute des fruits (Firestore Sync)
     const qFruits = query(fruitsCollection, orderBy('createdAt', 'desc'));
     onSnapshot(qFruits, (snapshot) => {
-        if (snapshot.docs.length > 0) {
-            allFruits = [];
-            snapshot.forEach(docSnapshot => {
-                allFruits.push({ id: docSnapshot.id, ...docSnapshot.data() });
-            });
-            saveLocalStorageData();
-        }
+        allFruits = [];
+        snapshot.forEach(docSnapshot => {
+            allFruits.push({ id: docSnapshot.id, ...docSnapshot.data() });
+        });
+        saveLocalStorageData();
         renderTable();
         updateStatsAndReports();
         updatePOSSelect();
@@ -424,12 +317,11 @@ function initRealtimeUpdates() {
     // 2. Écoute des remboursements / règlements de dettes
     const repaymentsCollection = collection(db, 'repayments');
     onSnapshot(repaymentsCollection, (snapshot) => {
-        if (snapshot.docs.length > 0) {
-            allRepaymentsData = [];
-            snapshot.forEach(docSnapshot => {
-                allRepaymentsData.push({ id: docSnapshot.id, ...docSnapshot.data() });
-            });
-        }
+        allRepaymentsData = [];
+        snapshot.forEach(docSnapshot => {
+            allRepaymentsData.push({ id: docSnapshot.id, ...docSnapshot.data() });
+        });
+        saveLocalStorageData();
         renderClientsTable();
     }, () => {
         renderClientsTable();
@@ -438,14 +330,12 @@ function initRealtimeUpdates() {
     // 3. Écoute de l'historique général
     const qHistory = query(historyCollection, orderBy('createdAt', 'desc'));
     onSnapshot(qHistory, (snapshot) => {
-        if (snapshot.docs.length > 0) {
-            allHistoryData = [];
-            snapshot.forEach(docSnapshot => {
-                const item = docSnapshot.data();
-                allHistoryData.push({ id: docSnapshot.id, ...item });
-            });
-            saveLocalStorageData();
-        }
+        allHistoryData = [];
+        snapshot.forEach(docSnapshot => {
+            const item = docSnapshot.data();
+            allHistoryData.push({ id: docSnapshot.id, ...item });
+        });
+        saveLocalStorageData();
         renderHistoryTable();
     }, (err) => {
         console.warn("Écouteur Firestore historique inaccessible, utilisation des données locales:", err);
@@ -455,14 +345,12 @@ function initRealtimeUpdates() {
     // 4. Écoute des Ventes (POS Sync)
     const qSales = query(salesCollection, orderBy('createdAt', 'desc'));
     onSnapshot(qSales, (snapshot) => {
-        if (snapshot.docs.length > 0) {
-            allSalesData = [];
-            snapshot.forEach(docSnapshot => {
-                const sale = { id: docSnapshot.id, ...docSnapshot.data() };
-                allSalesData.push(sale);
-            });
-            saveLocalStorageData();
-        }
+        allSalesData = [];
+        snapshot.forEach(docSnapshot => {
+            const sale = { id: docSnapshot.id, ...docSnapshot.data() };
+            allSalesData.push(sale);
+        });
+        saveLocalStorageData();
         renderRecentSalesTable();
     }, (err) => {
         console.warn("Écouteur Firestore ventes inaccessible, utilisation des données locales:", err);
@@ -558,7 +446,7 @@ function renderRecentSalesTable() {
 
             if(confirm('Êtes-vous sûr de vouloir annuler cette vente ? Le stock sera restitué.')) {
                 try {
-                    if (auth.currentUser && !window.isDemoMode) {
+                    if (auth.currentUser) {
                         await deleteDoc(doc(db, 'sales', saleId));
                         const fruitToUpdate = allFruits.find(f => f.id === fruitId);
                         if (fruitToUpdate) {
@@ -932,7 +820,7 @@ function renderTable() {
             const fruitName = e.currentTarget.getAttribute('data-name');
             if(confirm('Êtes-vous sûr de vouloir supprimer ce lot entier ?')) {
                 try {
-                    if (auth.currentUser && !window.isDemoMode) {
+                    if (auth.currentUser) {
                         await deleteDoc(doc(db, 'fruits', docId));
                     } else {
                         const idx = allFruits.findIndex(f => f.id === docId);
@@ -1083,7 +971,7 @@ function initPOS() {
             const totalPrice = pricePerKg * qtyToSell;
             const paymentMethod = document.getElementById('posPaymentMethod') ? document.getElementById('posPaymentMethod').value : "Espèces";
 
-            if (auth.currentUser && !window.isDemoMode) {
+            if (auth.currentUser) {
                 if (editSaleId) {
                     await updateDoc(doc(db, 'sales', editSaleId), {
                         qty: qtyToSell,
@@ -1118,7 +1006,7 @@ function initPOS() {
                     statusText: newStatusText
                 });
             } else {
-                // Mode Démo / Offline
+                // Mode Offline
                 fruit.soldQuantity = newSoldQty;
                 fruit.status = newStatus;
                 fruit.statusText = newStatusText;
@@ -1419,7 +1307,7 @@ function initAddModal() {
         };
 
         try {
-            if (auth.currentUser && !window.isDemoMode) {
+            if (auth.currentUser) {
                 if(fruitId) {
                     await updateDoc(doc(db, 'fruits', fruitId), itemData);
                     logAction("MODIFICATION", `Mise à jour du lot "${nameVal}"`);
@@ -1430,12 +1318,12 @@ function initAddModal() {
                     logAction("AJOUT", `Arrivage de ${qtyVal} kg de "${nameVal}" enregistré`);
                 }
             } else {
-                // Mode Démo / Offline - Mise à jour locale du stock
+                // Mode Offline - Mise à jour locale du stock
                 if (fruitId) {
                     const idx = allFruits.findIndex(f => f.id === fruitId);
                     if (idx !== -1) allFruits[idx] = { ...allFruits[idx], ...itemData };
                 } else {
-                    itemData.id = "demo_" + Date.now();
+                    itemData.id = "fruit_" + Date.now();
                     itemData.soldQuantity = 0;
                     itemData.createdAt = { toDate: () => new Date() };
                     allFruits.unshift(itemData);
@@ -1453,7 +1341,7 @@ function initAddModal() {
                 const idx = allFruits.findIndex(f => f.id === fruitId);
                 if (idx !== -1) allFruits[idx] = { ...allFruits[idx], ...itemData };
             } else {
-                itemData.id = "demo_" + Date.now();
+                itemData.id = "fruit_" + Date.now();
                 itemData.soldQuantity = 0;
                 itemData.createdAt = { toDate: () => new Date() };
                 allFruits.unshift(itemData);
@@ -1499,23 +1387,19 @@ function initAuth() {
     const loginError = document.getElementById('loginError');
     const loginBtn = document.getElementById('loginBtn');
     
-    // Restaurer la session locale au chargement si elle existe
-    const savedDemoUser = localStorage.getItem('freshstock_demo_user');
-    if (savedDemoUser) {
-        window.isDemoMode = true;
-    }
+    // Nettoyer toute trace de session démo antérieure
+    localStorage.removeItem('freshstock_demo_user');
 
     // Écouteur d'état d'authentification
     onAuthStateChanged(auth, (user) => {
         const loginScreen = document.getElementById('login-screen');
         const appContainer = document.getElementById('app-container');
-        const demoUser = localStorage.getItem('freshstock_demo_user');
         
-        if (user || window.isDemoMode || demoUser) {
+        if (user) {
             loginScreen.style.display = 'none';
             appContainer.style.display = 'flex';
             const emailLabel = document.getElementById('currentUserEmail');
-            if(emailLabel) emailLabel.textContent = user ? user.email.split('@')[0] : (demoUser || "Demo Admin");
+            if(emailLabel) emailLabel.textContent = user.email ? user.email.split('@')[0] : "Admin";
         } else {
             loginScreen.style.display = 'flex';
             appContainer.style.display = 'none';
@@ -1525,7 +1409,7 @@ function initAuth() {
     if(loginForm) {
         loginForm.addEventListener('submit', async (e) => {
             e.preventDefault();
-            const email = document.getElementById('loginEmail').value;
+            const email = document.getElementById('loginEmail').value.trim();
             const password = document.getElementById('loginPassword').value;
             
             loginBtn.textContent = "Connexion...";
@@ -1534,30 +1418,19 @@ function initAuth() {
             
             try {
                 await signInWithEmailAndPassword(auth, email, password);
-                localStorage.removeItem('freshstock_demo_user');
                 loginForm.reset();
             } catch (error) {
                 console.error("Erreur de connexion:", error);
-                if (email === "skhamidou03@gmail.com" && password === "Menia042912") {
-                    window.isDemoMode = true;
-                    localStorage.setItem('freshstock_demo_user', "skhamidou03");
-                    document.getElementById('login-screen').style.display = 'none';
-                    document.getElementById('app-container').style.display = 'flex';
-                    const emailLabel = document.getElementById('currentUserEmail');
-                    if(emailLabel) emailLabel.textContent = "skhamidou03";
-                } else if (error.code === 'auth/configuration-not-found') {
-                    loginError.innerHTML = `L'authentification n'est pas encore activée sur la console Firebase.<br><button id="btnDemoMode" style="margin-top: 10px; padding: 6px 12px; background: var(--primary); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: 600;">Accéder en Mode Démo</button>`;
-                    loginError.style.display = 'block';
-                    document.getElementById('btnDemoMode')?.addEventListener('click', () => {
-                        window.isDemoMode = true;
-                        localStorage.setItem('freshstock_demo_user', "Demo Admin");
-                        document.getElementById('login-screen').style.display = 'none';
-                        document.getElementById('app-container').style.display = 'flex';
-                    });
-                } else {
+                if (error.code === 'auth/invalid-credential' || error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
                     loginError.textContent = "Email ou mot de passe incorrect.";
-                    loginError.style.display = 'block';
+                } else if (error.code === 'auth/too-many-requests') {
+                    loginError.textContent = "Trop de tentatives. Veuillez réessayer plus tard.";
+                } else if (error.code === 'auth/network-request-failed') {
+                    loginError.textContent = "Erreur réseau. Vérifiez votre connexion internet.";
+                } else {
+                    loginError.textContent = "Échec de connexion : " + (error.message || error.code);
                 }
+                loginError.style.display = 'block';
             } finally {
                 loginBtn.textContent = "Se Connecter";
                 loginBtn.disabled = false;
@@ -1568,8 +1441,6 @@ function initAuth() {
     const logoutBtn = document.getElementById('logoutBtn');
     if(logoutBtn) {
         logoutBtn.addEventListener('click', () => {
-            window.isDemoMode = false;
-            localStorage.removeItem('freshstock_demo_user');
             signOut(auth);
             document.getElementById('login-screen').style.display = 'flex';
             document.getElementById('app-container').style.display = 'none';
@@ -1764,7 +1635,7 @@ function initWasteModal() {
             let newStatusText = remaining <= 0 ? "Épuisé" : (fruit.statusText || fruit.status || "");
 
             try {
-                if (auth.currentUser && !window.isDemoMode) {
+                if (auth.currentUser) {
                     await updateDoc(doc(db, 'fruits', fruitId), {
                         soldQuantity: newSoldQty,
                         status: newStatus,
@@ -1833,7 +1704,7 @@ function initDebtModal() {
         const amount = parseInt(document.getElementById('debtPayAmount').value) || 0;
 
         try {
-            if (auth.currentUser && !window.isDemoMode) {
+            if (auth.currentUser) {
                 const repaymentsCollection = collection(db, 'repayments');
                 await addDoc(repaymentsCollection, {
                     clientName: name,
