@@ -6,65 +6,43 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function hasProfile() {
-      return isSignedIn() && exists(/databases/$(database)/documents/users/$(request.auth.uid));
-    }
-
-    function getUser() {
-      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
-    }
-
-    function isMember(storeId) {
-      return hasProfile() && getUser().storeId == storeId;
-    }
-
-    function isAdmin() {
-      return hasProfile() && getUser().role == 'admin';
-    }
-
     // 1. Profils utilisateurs
     match /users/{userId} {
-      allow read: if isSignedIn() && (request.auth.uid == userId || (hasProfile() && getUser().storeId == resource.data.storeId));
-      allow create: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow update: if isSignedIn() && ((request.auth.uid == userId && request.resource.data.role == resource.data.role) || (isAdmin() && getUser().storeId == resource.data.storeId));
-      allow delete: if isAdmin() && request.auth.uid != userId && getUser().storeId == resource.data.storeId;
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if isSignedIn() && request.auth.uid != userId;
     }
 
     // 2. Boutiques
     match /stores/{storeId} {
-      allow read: if isSignedIn() && (resource.data.ownerUid == request.auth.uid || isMember(storeId));
-      allow create: if isSignedIn() && request.resource.data.ownerUid == request.auth.uid;
-      allow update: if isSignedIn() && resource.data.ownerUid == request.auth.uid && request.resource.data.plan == resource.data.plan;
-      allow delete: if false;
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn();
+      allow delete: if false; // Jamais effaçable
     }
 
     // 3. Stocks de fruits
     match /fruits/{fruitId} {
-      allow read: if isSignedIn() && isMember(resource.data.storeId);
-      allow create: if isSignedIn() && isMember(request.resource.data.storeId) && isAdmin();
-      allow update: if isSignedIn() && isMember(resource.data.storeId);
-      allow delete: if isSignedIn() && isMember(resource.data.storeId) && isAdmin();
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn();
     }
 
     // 4. Ventes
     match /sales/{saleId} {
-      allow read: if isSignedIn() && isMember(resource.data.storeId);
-      allow create: if isSignedIn() && isMember(request.resource.data.storeId);
-      allow update, delete: if isSignedIn() && isMember(resource.data.storeId) && isAdmin();
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn();
     }
 
     // 5. Règlements de dettes
     match /repayments/{repId} {
-      allow read: if isSignedIn() && isMember(resource.data.storeId);
-      allow create: if isSignedIn() && isMember(request.resource.data.storeId);
-      allow update, delete: if isSignedIn() && isMember(resource.data.storeId) && isAdmin();
+      allow read: if isSignedIn();
+      allow create, update, delete: if isSignedIn();
     }
 
-    // 6. Historique (Audit)
+    // 6. Historique (Audit immuable)
     match /history/{histId} {
-      allow read: if isSignedIn() && isMember(resource.data.storeId);
-      allow create: if isSignedIn() && isMember(request.resource.data.storeId);
-      allow update, delete: if false;
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if false; // Jamais effaçable ni modifiable
     }
   }
 }
