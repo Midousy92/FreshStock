@@ -1,8 +1,8 @@
-import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, serverTimestamp, query, orderBy, getDoc } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
-import { getAuth, signInWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
+import { initializeApp, deleteApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { getFirestore, collection, addDoc, onSnapshot, deleteDoc, doc, updateDoc, setDoc, serverTimestamp, query, where, getDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-auth.js";
 
-// TODO: Remplacez ces valeurs par celles de votre projet Firebase
+// Configuration Firebase
 const firebaseConfig = {
   apiKey: "AIzaSyD3JZHSlG8BoZrJzJulWvuYHaq_BgacB88",
   authDomain: "freshstock-b2b2e.firebaseapp.com",
@@ -20,28 +20,48 @@ const auth = getAuth(app);
 const fruitsCollection = collection(db, 'fruits');
 const historyCollection = collection(db, 'history');
 const salesCollection = collection(db, 'sales');
+const repaymentsCollection = collection(db, 'repayments');
+const storesCollection = collection(db, 'stores');
+const usersCollection = collection(db, 'users');
 
 let allFruits = [];
 let allSalesData = [];
 let allRepaymentsData = [];
 let allHistoryData = [];
+let allTeamMembers = [];
+
+let currentStore = null;
+let currentStoreId = null;
+let currentUserRole = "admin";
+let currentUserProfile = null;
+let unsubscribeListeners = [];
+window.storeCurrency = "FCFA";
+
+function formatCurrency(amount) {
+    const curr = window.storeCurrency || "FCFA";
+    return (amount || 0).toLocaleString('fr-FR') + " " + curr;
+}
+
+function getStoreKey(baseKey) {
+    return currentStoreId ? `${baseKey}_${currentStoreId}` : baseKey;
+}
 
 function loadLocalStorageData() {
-    // Purge de l'éventuelle clé démo résiduelle
     localStorage.removeItem('freshstock_demo_user');
 
-    const savedFruits = localStorage.getItem('freshstock_fruits');
+    const keyFruits = getStoreKey('freshstock_fruits');
+    const savedFruits = localStorage.getItem(keyFruits) || localStorage.getItem('freshstock_fruits');
     if (savedFruits) {
         try { 
             const parsed = JSON.parse(savedFruits);
-            // Filtrer les anciens éléments de démonstration
             allFruits = Array.isArray(parsed) ? parsed.filter(f => !f.id || !f.id.toString().startsWith('demo_')) : [];
         } catch(e) { allFruits = []; }
     } else {
         allFruits = [];
     }
 
-    const savedSales = localStorage.getItem('freshstock_sales');
+    const keySales = getStoreKey('freshstock_sales');
+    const savedSales = localStorage.getItem(keySales) || localStorage.getItem('freshstock_sales');
     if (savedSales) {
         try { 
             const parsed = JSON.parse(savedSales);
@@ -51,7 +71,8 @@ function loadLocalStorageData() {
         allSalesData = [];
     }
 
-    const savedRepayments = localStorage.getItem('freshstock_repayments');
+    const keyRepay = getStoreKey('freshstock_repayments');
+    const savedRepayments = localStorage.getItem(keyRepay) || localStorage.getItem('freshstock_repayments');
     if (savedRepayments) {
         try { 
             const parsed = JSON.parse(savedRepayments);
@@ -61,7 +82,8 @@ function loadLocalStorageData() {
         allRepaymentsData = [];
     }
 
-    const savedHistory = localStorage.getItem('freshstock_history');
+    const keyHist = getStoreKey('freshstock_history');
+    const savedHistory = localStorage.getItem(keyHist) || localStorage.getItem('freshstock_history');
     if (savedHistory) {
         try { 
             const parsed = JSON.parse(savedHistory);
@@ -74,10 +96,14 @@ function loadLocalStorageData() {
 
 function saveLocalStorageData() {
     try {
-        localStorage.setItem('freshstock_fruits', JSON.stringify(allFruits));
-        localStorage.setItem('freshstock_sales', JSON.stringify(allSalesData));
-        localStorage.setItem('freshstock_repayments', JSON.stringify(allRepaymentsData));
-        localStorage.setItem('freshstock_history', JSON.stringify(allHistoryData));
+        const kFruits = getStoreKey('freshstock_fruits');
+        const kSales = getStoreKey('freshstock_sales');
+        const kRepay = getStoreKey('freshstock_repayments');
+        const kHist = getStoreKey('freshstock_history');
+        localStorage.setItem(kFruits, JSON.stringify(allFruits));
+        localStorage.setItem(kSales, JSON.stringify(allSalesData));
+        localStorage.setItem(kRepay, JSON.stringify(allRepaymentsData));
+        localStorage.setItem(kHist, JSON.stringify(allHistoryData));
     } catch(e) {
         console.error("LocalStorage write error:", e);
     }
@@ -190,7 +216,7 @@ function printPriceTag(fruit) {
                 <div class="fruit-name">${fruit.name}</div>
                 <div class="fruit-origin">Origine: ${fruit.origin || 'Sélectionné'}</div>
                 <div class="price-box">
-                    <div class="price-val">${(fruit.price || 0).toLocaleString('fr-FR')} FCFA</div>
+                    <div class="price-val">${formatCurrency(fruit.price || 0)}</div>
                     <div class="price-unit">LE KILOGRAMME (KG)</div>
                 </div>
                 <div class="tag-footer">Garantie Fraîcheur & Traçabilité</div>
@@ -209,6 +235,7 @@ async function logAction(action, detail) {
     try {
         if (auth.currentUser) {
             await addDoc(historyCollection, {
+                storeId: currentStoreId || null,
                 action: action,
                 detail: detail,
                 createdAt: serverTimestamp()
@@ -226,6 +253,7 @@ function addLocalHistoryEntry(action, detail) {
     const dateStr = new Date().toLocaleString('fr-FR', {day: '2-digit', month: '2-digit', hour: '2-digit', minute:'2-digit'});
     const newEntry = {
         id: "hist_" + Date.now(),
+        storeId: currentStoreId || null,
         action: action,
         detail: detail,
         createdAtStr: dateStr,
@@ -287,8 +315,13 @@ function initNavigation() {
 }
 
 // ---------------- REALTIME & PERSISTENCE ----------------
-function initRealtimeUpdates() {
-    // 0. Charger immédiatement le cache localStorage
+function initRealtimeUpdates(storeId) {
+    if (!storeId) return;
+
+    // Nettoyer les écouteurs précédents
+    unsubscribeListeners.forEach(unsub => { try { if(typeof unsub === 'function') unsub(); } catch(e){} });
+    unsubscribeListeners = [];
+
     loadLocalStorageData();
     renderTable();
     updateStatsAndReports();
@@ -296,27 +329,34 @@ function initRealtimeUpdates() {
     renderRecentSalesTable();
     renderHistoryTable();
 
-    // 1. Écoute des fruits (Firestore Sync)
-    const qFruits = query(fruitsCollection, orderBy('createdAt', 'desc'));
-    onSnapshot(qFruits, (snapshot) => {
+    // 1. Écoute des fruits de la boutique
+    const qFruits = query(fruitsCollection, where('storeId', '==', storeId));
+    const unsubFruits = onSnapshot(qFruits, (snapshot) => {
         allFruits = [];
         snapshot.forEach(docSnapshot => {
             allFruits.push({ id: docSnapshot.id, ...docSnapshot.data() });
+        });
+        // Tri décroissant en mémoire (évite l'exigence d'index composite Firestore)
+        allFruits.sort((a,b) => {
+            const da = a.createdAt?.seconds || (a.createdAt instanceof Date ? a.createdAt.getTime()/1000 : 0);
+            const db = b.createdAt?.seconds || (b.createdAt instanceof Date ? b.createdAt.getTime()/1000 : 0);
+            return db - da;
         });
         saveLocalStorageData();
         renderTable();
         updateStatsAndReports();
         updatePOSSelect();
     }, (err) => {
-        console.warn("Écouteur Firestore fruits inaccessible, utilisation des données locales:", err);
+        console.warn("Écouteur Firestore fruits inaccessible:", err);
         renderTable();
         updateStatsAndReports();
         updatePOSSelect();
     });
+    unsubscribeListeners.push(unsubFruits);
 
     // 2. Écoute des remboursements / règlements de dettes
-    const repaymentsCollection = collection(db, 'repayments');
-    onSnapshot(repaymentsCollection, (snapshot) => {
+    const qRepay = query(repaymentsCollection, where('storeId', '==', storeId));
+    const unsubRepay = onSnapshot(qRepay, (snapshot) => {
         allRepaymentsData = [];
         snapshot.forEach(docSnapshot => {
             allRepaymentsData.push({ id: docSnapshot.id, ...docSnapshot.data() });
@@ -326,36 +366,63 @@ function initRealtimeUpdates() {
     }, () => {
         renderClientsTable();
     });
+    unsubscribeListeners.push(unsubRepay);
 
-    // 3. Écoute de l'historique général
-    const qHistory = query(historyCollection, orderBy('createdAt', 'desc'));
-    onSnapshot(qHistory, (snapshot) => {
+    // 3. Écoute de l'historique général de la boutique
+    const qHistory = query(historyCollection, where('storeId', '==', storeId));
+    const unsubHistory = onSnapshot(qHistory, (snapshot) => {
         allHistoryData = [];
         snapshot.forEach(docSnapshot => {
             const item = docSnapshot.data();
             allHistoryData.push({ id: docSnapshot.id, ...item });
         });
+        allHistoryData.sort((a,b) => {
+            const da = a.createdAt?.seconds || (a.createdAt instanceof Date ? a.createdAt.getTime()/1000 : 0);
+            const db = b.createdAt?.seconds || (b.createdAt instanceof Date ? b.createdAt.getTime()/1000 : 0);
+            return db - da;
+        });
         saveLocalStorageData();
         renderHistoryTable();
     }, (err) => {
-        console.warn("Écouteur Firestore historique inaccessible, utilisation des données locales:", err);
+        console.warn("Écouteur Firestore historique inaccessible:", err);
         renderHistoryTable();
     });
+    unsubscribeListeners.push(unsubHistory);
 
-    // 4. Écoute des Ventes (POS Sync)
-    const qSales = query(salesCollection, orderBy('createdAt', 'desc'));
-    onSnapshot(qSales, (snapshot) => {
+    // 4. Écoute des Ventes de la boutique
+    const qSales = query(salesCollection, where('storeId', '==', storeId));
+    const unsubSales = onSnapshot(qSales, (snapshot) => {
         allSalesData = [];
         snapshot.forEach(docSnapshot => {
             const sale = { id: docSnapshot.id, ...docSnapshot.data() };
             allSalesData.push(sale);
         });
+        allSalesData.sort((a,b) => {
+            const da = a.createdAt?.seconds || (a.createdAt instanceof Date ? a.createdAt.getTime()/1000 : 0);
+            const db = b.createdAt?.seconds || (b.createdAt instanceof Date ? b.createdAt.getTime()/1000 : 0);
+            return db - da;
+        });
         saveLocalStorageData();
         renderRecentSalesTable();
+        updateSubscriptionQuotaUI();
     }, (err) => {
-        console.warn("Écouteur Firestore ventes inaccessible, utilisation des données locales:", err);
+        console.warn("Écouteur Firestore ventes inaccessible:", err);
         renderRecentSalesTable();
     });
+    unsubscribeListeners.push(unsubSales);
+
+    // 5. Écoute des membres de l'équipe (Collaborateurs de la boutique)
+    const qTeam = query(usersCollection, where('storeId', '==', storeId));
+    const unsubTeam = onSnapshot(qTeam, (snapshot) => {
+        allTeamMembers = [];
+        snapshot.forEach(docSnapshot => {
+            allTeamMembers.push({ id: docSnapshot.id, ...docSnapshot.data() });
+        });
+        renderTeamTable();
+    }, (err) => {
+        console.warn("Écouteur équipe inaccessible:", err);
+    });
+    unsubscribeListeners.push(unsubTeam);
 }
 
 function renderRecentSalesTable() {
@@ -379,7 +446,7 @@ function renderRecentSalesTable() {
             </td>
             <td>${sale.fruitName}</td>
             <td><span class="status-badge" style="background: rgba(255,255,255,0.15); color: var(--text-main); font-weight: 500;">${sale.paymentMethod || 'Espèces'}</span></td>
-            <td><strong>${(sale.totalPrice || 0).toLocaleString('fr-FR')} FCFA</strong></td>
+            <td><strong>${formatCurrency(sale.totalPrice || 0)}</strong></td>
             <td>
                 <div class="action-btns">
                     <button class="btn-icon edit-sale-btn" data-sale='${encodeURIComponent(JSON.stringify({...sale, createdAt: null, createdAtStr: dateStr}))}' title="Modifier cette vente" style="color: var(--accent-orange);"><i class='bx bx-edit'></i></button>
@@ -619,13 +686,13 @@ function updateStatsAndReports() {
 
     // Mise à jour des KPI
     const revEl = document.getElementById('report-revenue');
-    if (revEl) revEl.textContent = totalRevenue.toLocaleString('fr-FR') + " FCFA";
+    if (revEl) revEl.textContent = formatCurrency(totalRevenue);
     
     const kgEl = document.getElementById('report-kilos-sold');
     if (kgEl) kgEl.textContent = totalKilosSold + " kg";
 
     const profitEl = document.getElementById('report-net-profit');
-    if (profitEl) profitEl.textContent = netProfit.toLocaleString('fr-FR') + " FCFA";
+    if (profitEl) profitEl.textContent = formatCurrency(netProfit);
 
     renderClientsTable();
     renderCharts(filteredSales);
@@ -638,7 +705,7 @@ function updateStatsAndReports() {
     const bestSellerEl = document.getElementById('report-best-seller');
     if (bestSellerEl) {
         if (topSalesArray.length > 0) {
-            bestSellerEl.innerHTML = `${topSalesArray[0].name}<br><span style="color: var(--text-muted); font-size:14px; font-weight: normal;">${topSalesArray[0].revenue.toLocaleString('fr-FR')} FCFA</span>`;
+            bestSellerEl.innerHTML = `${topSalesArray[0].name}<br><span style="color: var(--text-muted); font-size:14px; font-weight: normal;">${formatCurrency(topSalesArray[0].revenue)}</span>`;
         } else {
             bestSellerEl.textContent = "-";
         }
@@ -653,7 +720,7 @@ function updateStatsAndReports() {
             tr.innerHTML = `
                 <td><strong>${medal}${item.name}</strong></td>
                 <td>${item.qty} kg</td>
-                <td><strong style="color: var(--primary);">${item.revenue.toLocaleString('fr-FR')} FCFA</strong></td>
+                <td><strong style="color: var(--primary);">${formatCurrency(item.revenue)}</strong></td>
             `;
             reportTopSalesTbody.appendChild(tr);
         });
@@ -710,7 +777,7 @@ function renderClientsTable() {
     sortedClients.forEach(c => {
         const cleanPhone = (c.phone || '').replace(/\D/g, '');
         const netDebt = Math.max(0, c.totalCredit - c.repaid);
-        const relanceMsg = encodeURIComponent(`Bonjour ${c.name}, nous vous contactons concernant votre solde dû de ${netDebt.toLocaleString('fr-FR')} FCFA chez FreshStock. Merci de nous recontacter pour procéder au règlement. Cordialement !`);
+        const relanceMsg = encodeURIComponent(`Bonjour ${c.name}, nous vous contactons concernant votre solde dû de ${formatCurrency(netDebt)} chez FreshStock. Merci de nous recontacter pour procéder au règlement. Cordialement !`);
         const waLink = cleanPhone ? `https://wa.me/${cleanPhone}` : '#';
         const waRelanceLink = cleanPhone ? `https://wa.me/${cleanPhone}?text=${relanceMsg}` : '#';
 
@@ -720,9 +787,9 @@ function renderClientsTable() {
             <td>${c.phone}</td>
             <td><span style="color: var(--text-muted);">${c.address}</span></td>
             <td><span class="status-badge status-good">${c.purchaseCount} commande(s)</span></td>
-            <td><strong style="color: var(--primary);">${c.totalSpent.toLocaleString('fr-FR')} FCFA</strong></td>
+            <td><strong style="color: var(--primary);">${formatCurrency(c.totalSpent)}</strong></td>
             <td>
-                ${netDebt > 0 ? `<strong style="color: var(--accent-red);">${netDebt.toLocaleString('fr-FR')} FCFA</strong>` : `<span style="color: var(--primary); font-size: 13px;">0 FCFA (À jour)</span>`}
+                ${netDebt > 0 ? `<strong style="color: var(--accent-red);">${formatCurrency(netDebt)}</strong>` : `<span style="color: var(--primary); font-size: 13px;">${formatCurrency(0)} (À jour)</span>`}
             </td>
             <td>
                 <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
@@ -781,7 +848,7 @@ function renderTable() {
                 </div>
             </td>
             <td>${item.origin}</td>
-            <td><strong>${item.price || 0} FCFA</strong></td>
+            <td><strong>${formatCurrency(item.price || 0)}</strong></td>
             <td style="color: var(--text-muted);">${initialQty} kg</td>
             <td style="color: var(--accent-orange); font-weight: 500;">${soldQty} kg</td>
             <td><strong style="font-size: 16px;">${remainingQty} kg</strong></td>
@@ -865,7 +932,7 @@ function updatePOSSelect() {
             const opt = document.createElement('option');
             opt.value = fruit.id;
             opt.dataset.price = price;
-            opt.textContent = `${icon} ${fruit.name} (Origine: ${fruit.origin}) - Reste: ${remainingQty} kg - Prix: ${price} FCFA/kg`;
+            opt.textContent = `${icon} ${fruit.name} (Origine: ${fruit.origin}) - Reste: ${remainingQty} kg - Prix: ${formatCurrency(price)}/kg`;
             select.appendChild(opt);
         }
     });
@@ -887,7 +954,7 @@ function initPOS() {
         const option = select.options[select.selectedIndex];
         const price = option && option.dataset.price ? parseInt(option.dataset.price) : 0;
         const qty = parseInt(qtyInput.value) || 0;
-        totalPriceEl.textContent = (price * qty).toLocaleString('fr-FR') + " FCFA";
+        totalPriceEl.textContent = formatCurrency(price * qty);
     };
 
     select.addEventListener('change', () => {
@@ -945,6 +1012,21 @@ function initPOS() {
         const editSaleId = document.getElementById('posEditSaleId') ? document.getElementById('posEditSaleId').value : "";
         const oldQty = editSaleId ? (parseInt(document.getElementById('posEditOldQty').value) || 0) : 0;
 
+        if (!editSaleId && (!currentStore || currentStore.plan === 'free')) {
+            const count = getMonthlySalesCount();
+            if (count >= 50) {
+                alert("⚠️ Limite du forfait Gratuit atteinte (50 ventes ce mois-ci).\nVeuillez passer au forfait PRO pour débloquer les ventes illimitées !");
+                const subModal = document.getElementById('subscriptionModal');
+                if (subModal) {
+                    updateSubscriptionQuotaUI();
+                    subModal.classList.add('active');
+                }
+                submitBtn.disabled = false;
+                submitBtn.textContent = 'Valider la vente';
+                return;
+            }
+        }
+
         const fruit = allFruits.find(f => f.id === fruitId);
         if(!fruit) {
             submitBtn.disabled = false;
@@ -983,7 +1065,11 @@ function initPOS() {
                     });
                     logAction("MODIFICATION", `Vente modifiée: ${qtyToSell} kg de "${fruit.name}" pour ${clientName}`);
                 } else {
+                    const sellerName = currentUserProfile?.displayName || (auth.currentUser.email ? auth.currentUser.email.split('@')[0] : "Caissier");
                     await addDoc(salesCollection, {
+                        storeId: currentStoreId || null,
+                        sellerUid: auth.currentUser.uid,
+                        sellerName: sellerName,
                         fruitId: fruitId,
                         fruitName: fruit.name,
                         qty: qtyToSell,
@@ -1013,6 +1099,8 @@ function initPOS() {
 
                 const newSaleObj = {
                     id: editSaleId || ("sale_" + Date.now()),
+                    storeId: currentStoreId || null,
+                    sellerName: currentUserProfile?.displayName || "Caissier",
                     fruitId: fruitId,
                     fruitName: fruit.name,
                     qty: qtyToSell,
@@ -1038,6 +1126,7 @@ function initPOS() {
                 renderTable();
                 updatePOSSelect();
                 renderRecentSalesTable();
+                updateSubscriptionQuotaUI();
             }
             
             resetPOSForm();
@@ -1064,6 +1153,8 @@ function initPOS() {
 
             allSalesData.unshift({
                 id: "sale_" + Date.now(),
+                storeId: currentStoreId || null,
+                sellerName: currentUserProfile?.displayName || "Caissier",
                 fruitId: fruitId,
                 fruitName: fruit.name,
                 qty: qtyToSell,
@@ -1082,6 +1173,7 @@ function initPOS() {
             renderTable();
             updatePOSSelect();
             renderRecentSalesTable();
+            updateSubscriptionQuotaUI();
             resetPOSForm();
             playPosBeep();
 
@@ -1121,12 +1213,12 @@ function openReceiptModal(sale) {
             <tr>
                 <td style="padding: 8px 0;"><strong>${sale.fruitName}</strong></td>
                 <td style="padding: 8px 0; text-align: center;">${sale.qty} kg</td>
-                <td style="padding: 8px 0; text-align: right; font-weight: 600;">${(sale.totalPrice || 0).toLocaleString('fr-FR')} FCFA</td>
+                <td style="padding: 8px 0; text-align: right; font-weight: 600;">${formatCurrency(sale.totalPrice || 0)}</td>
             </tr>
         `;
     }
 
-    document.getElementById('receiptTotal').textContent = `${(sale.totalPrice || 0).toLocaleString('fr-FR')} FCFA`;
+    document.getElementById('receiptTotal').textContent = formatCurrency(sale.totalPrice || 0);
     modal.classList.add('active');
 }
 
@@ -1136,6 +1228,7 @@ function printReceipt(sale) {
 
 function printInvoice(sale) {
     const invoiceWindow = window.open('', '_blank', 'width=850,height=950');
+    const storeName = currentStore?.name || "FreshStock Primeur";
     invoiceWindow.document.write(`
         <!DOCTYPE html>
         <html lang="fr">
@@ -1170,10 +1263,9 @@ function printInvoice(sale) {
             <div class="details-grid">
                 <div class="box">
                     <h3>Émetteur</h3>
-                    <strong style="font-size: 16px;">FreshStock Senegal SARL</strong><br>
-                    Marché Central de Fruits<br>
-                    Dakar, Sénégal<br>
-                    Tél: +221 77 000 00 00
+                    <strong style="font-size: 16px;">${storeName}</strong><br>
+                    Plateforme SaaS FreshStock<br>
+                    Tél: ${currentUserProfile?.email || 'Support FreshStock'}
                 </div>
                 <div class="box">
                     <h3>Client / Destinataire</h3>
@@ -1196,12 +1288,12 @@ function printInvoice(sale) {
                     <tr>
                         <td><strong>${sale.fruitName}</strong> (Qualité Garantie)</td>
                         <td>${sale.qty} kg</td>
-                        <td>${(sale.pricePerKg || 0).toLocaleString('fr-FR')} FCFA / kg</td>
-                        <td><strong>${(sale.totalPrice || 0).toLocaleString('fr-FR')} FCFA</strong></td>
+                        <td>${formatCurrency(sale.pricePerKg || 0)} / kg</td>
+                        <td><strong>${formatCurrency(sale.totalPrice || 0)}</strong></td>
                     </tr>
                     <tr class="total-row">
                         <td colspan="3" style="text-align: right; font-weight: 700;">TOTAL NET À PAYER :</td>
-                        <td>${(sale.totalPrice || 0).toLocaleString('fr-FR')} FCFA</td>
+                        <td>${formatCurrency(sale.totalPrice || 0)}</td>
                     </tr>
                 </tbody>
             </table>
@@ -1293,6 +1385,7 @@ function initAddModal() {
         const minQtyVal = parseInt(document.getElementById('fruitMinQty').value) || 20;
         
         const itemData = {
+            storeId: currentStoreId || null,
             name: nameVal,
             image: finalIcon,
             origin: document.getElementById('fruitOrigin').value,
@@ -1486,19 +1579,217 @@ function initAuth() {
         });
     }
 
+    // Gestion des onglets Connexion / Inscription
+    const tabLoginBtn = document.getElementById('tabLoginBtn');
+    const tabRegisterBtn = document.getElementById('tabRegisterBtn');
+    const registerView = document.getElementById('registerView');
+
+    const switchAuthTab = (tab) => {
+        if (tab === 'login') {
+            tabLoginBtn?.classList.add('active');
+            tabRegisterBtn?.classList.remove('active');
+            if (loginView) loginView.style.display = 'block';
+            if (registerView) registerView.style.display = 'none';
+            if (forgotPasswordView) forgotPasswordView.style.display = 'none';
+        } else {
+            tabRegisterBtn?.classList.add('active');
+            tabLoginBtn?.classList.remove('active');
+            if (loginView) loginView.style.display = 'none';
+            if (registerView) registerView.style.display = 'block';
+            if (forgotPasswordView) forgotPasswordView.style.display = 'none';
+        }
+    };
+
+    tabLoginBtn?.addEventListener('click', () => switchAuthTab('login'));
+    tabRegisterBtn?.addEventListener('click', () => switchAuthTab('register'));
+
+    // Toggle mot de passe inscription
+    const toggleRegPasswordBtn = document.getElementById('toggleRegPasswordBtn');
+    const regPasswordInput = document.getElementById('regPassword');
+    const toggleRegPasswordIcon = document.getElementById('toggleRegPasswordIcon');
+    if (toggleRegPasswordBtn && regPasswordInput && toggleRegPasswordIcon) {
+        toggleRegPasswordBtn.addEventListener('click', () => {
+            const isPassword = regPasswordInput.type === 'password';
+            regPasswordInput.type = isPassword ? 'text' : 'password';
+            toggleRegPasswordIcon.className = isPassword ? 'bx bx-hide' : 'bx bx-show';
+            const actionText = isPassword ? "Masquer le mot de passe" : "Afficher le mot de passe";
+            toggleRegPasswordBtn.setAttribute('title', actionText);
+            toggleRegPasswordBtn.setAttribute('aria-label', actionText);
+        });
+    }
+
+    // Formulaire d'inscription de nouvelle boutique
+    const registerForm = document.getElementById('registerForm');
+    const registerBtn = document.getElementById('registerBtn');
+    const registerError = document.getElementById('registerError');
+
+    if (registerForm) {
+        registerForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const storeName = document.getElementById('regStoreName').value.trim();
+            const ownerName = document.getElementById('regOwnerName').value.trim();
+            const email = document.getElementById('regEmail').value.trim();
+            const currency = document.getElementById('regCurrency').value;
+            const password = document.getElementById('regPassword').value;
+
+            registerBtn.textContent = "Création en cours...";
+            registerBtn.disabled = true;
+            if (registerError) registerError.style.display = 'none';
+
+            try {
+                const userCred = await createUserWithEmailAndPassword(auth, email, password);
+                const user = userCred.user;
+                const newStoreId = "store_" + Date.now();
+
+                // 1. Créer la boutique dans Firestore
+                await setDoc(doc(db, 'stores', newStoreId), {
+                    id: newStoreId,
+                    name: storeName,
+                    ownerUid: user.uid,
+                    ownerName: ownerName,
+                    currency: currency,
+                    plan: 'free',
+                    createdAt: serverTimestamp()
+                });
+
+                // 2. Créer le profil gérant dans Firestore
+                await setDoc(doc(db, 'users', user.uid), {
+                    uid: user.uid,
+                    email: email,
+                    displayName: ownerName,
+                    storeId: newStoreId,
+                    role: 'admin',
+                    createdAt: serverTimestamp()
+                });
+
+                registerForm.reset();
+            } catch (err) {
+                console.error("Erreur inscription:", err);
+                let msg = "Erreur lors de la création de la boutique.";
+                if (err.code === 'auth/email-already-in-use') {
+                    msg = "Cette adresse email possède déjà un compte. Veuillez vous connecter.";
+                } else if (err.code === 'auth/weak-password') {
+                    msg = "Le mot de passe doit contenir au moins 6 caractères.";
+                } else if (err.code === 'auth/invalid-email') {
+                    msg = "Adresse email invalide.";
+                } else {
+                    msg = `Erreur (${err.code || 'inconnue'}) : ${err.message || ""}`;
+                }
+                if (registerError) {
+                    registerError.textContent = msg;
+                    registerError.style.display = 'block';
+                }
+            } finally {
+                registerBtn.textContent = "Créer mon Compte & ma Boutique";
+                registerBtn.disabled = false;
+            }
+        });
+    }
+
     // Écouteur d'état d'authentification
-    onAuthStateChanged(auth, (user) => {
+    onAuthStateChanged(auth, async (user) => {
         const loginScreen = document.getElementById('login-screen');
         const appContainer = document.getElementById('app-container');
-        
+
         if (user) {
+            try {
+                // 1. Récupérer ou initialiser le profil utilisateur
+                const userDocRef = doc(db, 'users', user.uid);
+                let userSnap = await getDoc(userDocRef);
+
+                if (!userSnap.exists()) {
+                    // Provisionnement automatique pour comptes préexistants
+                    const defaultStoreId = "store_" + user.uid.slice(0, 10);
+                    const storeDocRef = doc(db, 'stores', defaultStoreId);
+                    const storeSnap = await getDoc(storeDocRef);
+
+                    if (!storeSnap.exists()) {
+                        await setDoc(storeDocRef, {
+                            id: defaultStoreId,
+                            name: "Ma Boutique Primeur",
+                            ownerUid: user.uid,
+                            currency: "FCFA",
+                            plan: "free",
+                            createdAt: serverTimestamp()
+                        });
+                    }
+
+                    await setDoc(userDocRef, {
+                        uid: user.uid,
+                        email: user.email,
+                        displayName: user.displayName || user.email.split('@')[0],
+                        storeId: defaultStoreId,
+                        role: "admin",
+                        createdAt: serverTimestamp()
+                    });
+
+                    userSnap = await getDoc(userDocRef);
+                }
+
+                currentUserProfile = userSnap.data();
+                currentStoreId = currentUserProfile.storeId;
+                currentUserRole = currentUserProfile.role || "admin";
+
+                // 2. Récupérer la boutique
+                const storeDocRef = doc(db, 'stores', currentStoreId);
+                const storeSnap = await getDoc(storeDocRef);
+                if (storeSnap.exists()) {
+                    currentStore = storeSnap.data();
+                } else {
+                    currentStore = { id: currentStoreId, name: "Ma Boutique", plan: "free", currency: "FCFA" };
+                }
+
+                window.storeCurrency = currentStore.currency || "FCFA";
+
+                // 3. Mettre à jour l'en-tête et les badges SaaS
+                const storeNameEl = document.getElementById('currentStoreName');
+                if (storeNameEl) storeNameEl.textContent = currentStore.name || "Boutique";
+
+                const roleBadge = document.getElementById('currentUserRoleBadge');
+                if (roleBadge) {
+                    roleBadge.textContent = currentUserRole === 'admin' ? "Gérant" : "Caissier";
+                    roleBadge.className = 'role-pill ' + (currentUserRole === 'admin' ? 'admin' : 'cashier');
+                }
+
+                const planLabel = document.getElementById('planLabel');
+                if (planLabel) {
+                    planLabel.textContent = currentStore.plan === 'pro' ? "PRO ⭐" : "Gratuit";
+                }
+
+                const emailLabel = document.getElementById('currentUserEmail');
+                if (emailLabel) emailLabel.textContent = currentUserProfile.displayName || (user.email ? user.email.split('@')[0] : "Admin");
+
+                const userAvatar = document.getElementById('userAvatar');
+                if (userAvatar) {
+                    const avatarName = encodeURIComponent(currentUserProfile.displayName || "Admin");
+                    userAvatar.src = `https://ui-avatars.com/api/?name=${avatarName}&background=10b981&color=fff`;
+                }
+
+                // 4. Appliquer les permissions de rôle
+                applyRolePermissions(currentUserRole);
+
+                // 5. Lancer l'écouteur temps réel pour cette boutique
+                initRealtimeUpdates(currentStoreId);
+
+            } catch (err) {
+                console.error("Erreur chargement profil utilisateur / boutique:", err);
+            }
+
             loginScreen.style.display = 'none';
             appContainer.style.display = 'flex';
-            const emailLabel = document.getElementById('currentUserEmail');
-            if(emailLabel) emailLabel.textContent = user.email ? user.email.split('@')[0] : "Admin";
         } else {
-            if(forgotPasswordView) forgotPasswordView.style.display = 'none';
-            if(loginView) loginView.style.display = 'block';
+            // Nettoyage lors de la déconnexion
+            unsubscribeListeners.forEach(unsub => { try { if(typeof unsub === 'function') unsub(); } catch(e){} });
+            unsubscribeListeners = [];
+            currentStore = null;
+            currentStoreId = null;
+
+            if (forgotPasswordView) forgotPasswordView.style.display = 'none';
+            if (registerView) registerView.style.display = 'none';
+            if (loginView) loginView.style.display = 'block';
+            tabLoginBtn?.classList.add('active');
+            tabRegisterBtn?.classList.remove('active');
+
             loginScreen.style.display = 'flex';
             appContainer.style.display = 'none';
         }
@@ -1540,8 +1831,15 @@ function initAuth() {
     if(logoutBtn) {
         logoutBtn.addEventListener('click', () => {
             signOut(auth);
+            unsubscribeListeners.forEach(unsub => { try { if(typeof unsub === 'function') unsub(); } catch(e){} });
+            unsubscribeListeners = [];
+            currentStore = null;
+            currentStoreId = null;
             if(forgotPasswordView) forgotPasswordView.style.display = 'none';
+            if(registerView) registerView.style.display = 'none';
             if(loginView) loginView.style.display = 'block';
+            tabLoginBtn?.classList.add('active');
+            tabRegisterBtn?.classList.remove('active');
             document.getElementById('login-screen').style.display = 'flex';
             document.getElementById('app-container').style.display = 'none';
         });
@@ -1564,7 +1862,8 @@ function initCSVExports() {
     const btnSales = document.getElementById('btnExportSalesCSV');
     if(btnSales) {
         btnSales.addEventListener('click', () => {
-            let csv = "Date;Client;Telephone;Adresse;Produit;Quantite (kg);Prix Unitaire (FCFA);Total (FCFA)\n";
+            const curr = window.storeCurrency || 'FCFA';
+            let csv = `Date;Client;Telephone;Adresse;Produit;Quantite (kg);Prix Unitaire (${curr});Total (${curr})\n`;
             allSalesData.forEach(s => {
                 const dateStr = s.createdAt ? new Date(s.createdAt.toDate()).toLocaleString('fr-FR') : "";
                 csv += `"${dateStr}";"${s.clientName || ''}";"${s.clientPhone || ''}";"${s.clientAddress || ''}";"${s.fruitName || ''}";${s.qty || 0};${s.pricePerKg || 0};${s.totalPrice || 0}\n`;
@@ -1576,7 +1875,8 @@ function initCSVExports() {
     const btnInv = document.getElementById('btnExportInventoryCSV');
     if(btnInv) {
         btnInv.addEventListener('click', () => {
-            let csv = "Produit;Origine;Prix Achat (FCFA/kg);Prix Vente (FCFA/kg);Quantite Initiale (kg);Vendu (kg);Restant (kg);Date Arrivage;Statut\n";
+            const curr = window.storeCurrency || 'FCFA';
+            let csv = `Produit;Origine;Prix Achat (${curr}/kg);Prix Vente (${curr}/kg);Quantite Initiale (kg);Vendu (kg);Restant (kg);Date Arrivage;Statut\n`;
             allFruits.forEach(f => {
                 const initQty = f.initialQuantity !== undefined ? f.initialQuantity : (parseInt(f.quantity) || 0);
                 const soldQty = f.soldQuantity || 0;
@@ -1590,6 +1890,7 @@ function initCSVExports() {
     const btnClients = document.getElementById('btnExportClients');
     if(btnClients) {
         btnClients.addEventListener('click', () => {
+            const curr = window.storeCurrency || 'FCFA';
             let clientsMap = {};
             allSalesData.forEach(sale => {
                 const key = (sale.clientPhone || '').trim() || sale.clientName;
@@ -1600,7 +1901,7 @@ function initCSVExports() {
                 clientsMap[key].count += 1;
                 clientsMap[key].spent += (sale.totalPrice || 0);
             });
-            let csv = "Nom Client;Telephone;Adresse;Nombre d'achats;Total Depense (FCFA)\n";
+            let csv = `Nom Client;Telephone;Adresse;Nombre d'achats;Total Depense (${curr})\n`;
             Object.values(clientsMap).forEach(c => {
                 csv += `"${c.name}";"${c.phone}";"${c.address}";${c.count};${c.spent}\n`;
             });
@@ -1636,12 +1937,13 @@ function renderCharts(salesData) {
     if (trendChartInstance) trendChartInstance.destroy();
     if (distChartInstance) distChartInstance.destroy();
 
+    const curr = window.storeCurrency || 'FCFA';
     trendChartInstance = new Chart(trendCtx, {
         type: 'line',
         data: {
             labels: dates.length ? dates : ['Aucune vente'],
             datasets: [{
-                label: 'Chiffre d\'affaires (FCFA)',
+                label: `Chiffre d'affaires (${curr})`,
                 data: revenues.length ? revenues : [0],
                 borderColor: '#10b981',
                 backgroundColor: 'rgba(16, 185, 129, 0.15)',
@@ -1778,7 +2080,7 @@ function openDebtModal(name, phone, debt) {
     if(!modal) return;
     document.getElementById('debtClientName').value = name;
     document.getElementById('debtClientPhone').value = phone;
-    document.getElementById('debtCurrentAmount').textContent = debt.toLocaleString('fr-FR') + " FCFA";
+    document.getElementById('debtCurrentAmount').textContent = formatCurrency(debt);
     document.getElementById('debtPayAmount').value = "";
     document.getElementById('debtPayAmount').max = debt;
     modal.classList.add('active');
@@ -1807,6 +2109,7 @@ function initDebtModal() {
             if (auth.currentUser) {
                 const repaymentsCollection = collection(db, 'repayments');
                 await addDoc(repaymentsCollection, {
+                    storeId: currentStoreId || null,
                     clientName: name,
                     clientPhone: phone,
                     amount: amount,
@@ -1815,6 +2118,7 @@ function initDebtModal() {
             } else {
                 const repObj = {
                     id: "rep_" + Date.now(),
+                    storeId: currentStoreId || null,
                     clientName: name,
                     clientPhone: phone,
                     amount: amount,
@@ -1824,13 +2128,14 @@ function initDebtModal() {
                 saveLocalStorageData();
                 renderClientsTable();
             }
-            logAction("RÈGLEMENT DETTE", `Versement de ${amount.toLocaleString('fr-FR')} FCFA reçu du client ${name} (${phone}).`);
-            alert(`Versement de ${amount.toLocaleString('fr-FR')} FCFA enregistré avec succès !`);
+            logAction("RÈGLEMENT DETTE", `Versement de ${formatCurrency(amount)} reçu du client ${name} (${phone}).`);
+            alert(`Versement de ${formatCurrency(amount)} enregistré avec succès !`);
             closeModal();
         } catch(err) {
             console.warn("Erreur règlement, enregistrement local:", err);
             const repObj = {
                 id: "rep_" + Date.now(),
+                storeId: currentStoreId || null,
                 clientName: name,
                 clientPhone: phone,
                 amount: amount,
@@ -1839,8 +2144,8 @@ function initDebtModal() {
             allRepaymentsData.push(repObj);
             saveLocalStorageData();
             renderClientsTable();
-            logAction("RÈGLEMENT DETTE", `Versement de ${amount.toLocaleString('fr-FR')} FCFA reçu du client ${name} (${phone}).`);
-            alert(`Versement de ${amount.toLocaleString('fr-FR')} FCFA enregistré avec succès !`);
+            logAction("RÈGLEMENT DETTE", `Versement de ${formatCurrency(amount)} reçu du client ${name} (${phone}).`);
+            alert(`Versement de ${formatCurrency(amount)} enregistré avec succès !`);
             closeModal();
         } finally {
             submitBtn.disabled = false;
@@ -1874,15 +2179,276 @@ function initThemeToggle() {
     }
 }
 
+// ---------------- GESTION SAAS : RÔLES, ÉQUIPE & ABONNEMENTS ----------------
+function applyRolePermissions(role) {
+    const adminElements = document.querySelectorAll('.admin-only');
+    if (role === 'cashier') {
+        adminElements.forEach(el => el.style.display = 'none');
+        // Rediriger le caissier vers le POS (Caisse Ventes) par défaut
+        const activeNav = document.querySelector('.nav-item.active');
+        if (!activeNav || activeNav.classList.contains('admin-only')) {
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.querySelectorAll('.page-view').forEach(p => p.classList.remove('active'));
+            const posNav = document.querySelector('.nav-item[data-target="view-ventes"]');
+            const posView = document.getElementById('view-ventes');
+            if (posNav) posNav.classList.add('active');
+            if (posView) posView.classList.add('active');
+        }
+    } else {
+        adminElements.forEach(el => el.style.display = '');
+    }
+}
+
+function renderTeamTable() {
+    const tbody = document.getElementById('team-list');
+    if (!tbody) return;
+    tbody.innerHTML = '';
+
+    if (!allTeamMembers || allTeamMembers.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 20px;">Aucun membre d'équipe enregistré. Cliquez sur "Ajouter un Vendeur" pour inviter un collaborateur.</td></tr>`;
+        return;
+    }
+
+    allTeamMembers.forEach(member => {
+        const tr = document.createElement('tr');
+        const roleName = member.role === 'admin' ? 'Gérant / Admin' : 'Caissier / Vendeur';
+        const roleClass = member.role === 'admin' ? 'admin' : 'cashier';
+        const permText = member.role === 'admin' ? 'Accès complet (Stock, Finances, Équipe)' : 'Point de vente, Ventes & Déclarations de perte';
+
+        let dateStr = "";
+        if (member.createdAt) {
+            const d = parseDate(member.createdAt);
+            dateStr = d.toLocaleDateString('fr-FR');
+        }
+
+        tr.innerHTML = `
+            <td>
+                <div style="display: flex; align-items: center; gap: 10px;">
+                    <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(member.displayName || member.email)}&background=10b981&color=fff" style="width: 32px; height: 32px; border-radius: 50%;">
+                    <strong>${member.displayName || member.email.split('@')[0]}</strong>
+                </div>
+            </td>
+            <td>${member.email}</td>
+            <td><span class="role-pill ${roleClass}">${roleName}</span></td>
+            <td><small style="color: var(--text-muted);">${permText}</small></td>
+            <td>${dateStr || '-'}</td>
+        `;
+        tbody.appendChild(tr);
+    });
+}
+
+function initTeamModal() {
+    const modal = document.getElementById('addCashierModal');
+    const form = document.getElementById('addCashierForm');
+    const btnOpen = document.getElementById('btnOpenAddCashierModal');
+    const btnClose = document.getElementById('closeAddCashierBtn');
+    const btnCancel = document.getElementById('cancelCashierBtn');
+    const errorEl = document.getElementById('cashierError');
+    const saveBtn = document.getElementById('saveCashierBtn');
+
+    if (!modal) return;
+
+    const openModal = () => {
+        if (form) form.reset();
+        if (errorEl) errorEl.style.display = 'none';
+        modal.classList.add('active');
+    };
+
+    const closeModal = () => modal.classList.remove('active');
+
+    if (btnOpen) btnOpen.addEventListener('click', openModal);
+    if (btnClose) btnClose.addEventListener('click', closeModal);
+    if (btnCancel) btnCancel.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+
+    if (form) {
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.textContent = "Création en cours...";
+            }
+            if (errorEl) errorEl.style.display = 'none';
+
+            const name = document.getElementById('cashierName').value.trim();
+            const email = document.getElementById('cashierEmail').value.trim();
+            const password = document.getElementById('cashierPassword').value;
+            const role = document.getElementById('cashierRole').value || 'cashier';
+
+            let secondaryApp = null;
+            try {
+                // Utilisation d'une instance Firebase secondaire pour ne pas déconnecter le gérant
+                const secondaryAppName = "CashierCreator_" + Date.now();
+                secondaryApp = initializeApp(firebaseConfig, secondaryAppName);
+                const secondaryAuth = getAuth(secondaryApp);
+
+                const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
+                const newUid = cred.user.uid;
+
+                // Enregistrer dans Firestore users
+                await setDoc(doc(db, 'users', newUid), {
+                    uid: newUid,
+                    email: email,
+                    displayName: name,
+                    storeId: currentStoreId,
+                    role: role,
+                    createdAt: serverTimestamp()
+                });
+
+                await signOut(secondaryAuth);
+                logAction("ÉQUIPE", `Ajout du collaborateur "${name}" (${email}) avec le rôle ${role === 'admin' ? 'Gérant' : 'Caissier'}.`);
+                alert(`Le compte collaborateur pour "${name}" a été créé avec succès !`);
+                closeModal();
+            } catch (err) {
+                console.error("Erreur création collaborateur:", err);
+                let msg = "Erreur lors de la création du compte.";
+                if (err.code === 'auth/email-already-in-use') {
+                    msg = "Cette adresse email possède déjà un compte FreshStock.";
+                } else if (err.code === 'auth/weak-password') {
+                    msg = "Le mot de passe doit comporter au moins 6 caractères.";
+                } else if (err.code === 'auth/invalid-email') {
+                    msg = "Adresse email invalide.";
+                } else {
+                    msg = err.message || msg;
+                }
+                if (errorEl) {
+                    errorEl.textContent = msg;
+                    errorEl.style.display = 'block';
+                }
+            } finally {
+                if (secondaryApp) {
+                    try { await deleteApp(secondaryApp); } catch(e){}
+                }
+                if (saveBtn) {
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = "Créer le compte";
+                }
+            }
+        });
+    }
+}
+
+function getMonthlySalesCount() {
+    const now = new Date();
+    const currentMonth = now.getMonth();
+    const currentYear = now.getFullYear();
+
+    return allSalesData.filter(sale => {
+        const d = parseDate(sale.createdAt);
+        return d.getMonth() === currentMonth && d.getFullYear() === currentYear;
+    }).length;
+}
+
+function updateSubscriptionQuotaUI() {
+    const counterText = document.getElementById('quotaCounterText');
+    const progressBar = document.getElementById('quotaProgressBar');
+    const quotaHint = document.getElementById('quotaHint');
+    const planLabel = document.getElementById('planLabel');
+    const planPill = document.getElementById('btnOpenSubscription');
+
+    const isPro = currentStore?.plan === 'pro';
+    const count = getMonthlySalesCount();
+    const limit = 50;
+
+    if (planLabel) {
+        planLabel.textContent = isPro ? "PRO ⭐" : "Gratuit";
+    }
+
+    if (planPill) {
+        if (isPro) {
+            planPill.classList.remove('warning');
+            planPill.classList.add('pro');
+        } else if (count >= 40) {
+            planPill.classList.add('warning');
+            planPill.classList.remove('pro');
+        } else {
+            planPill.classList.remove('warning', 'pro');
+        }
+    }
+
+    if (counterText) {
+        if (isPro) {
+            counterText.textContent = `${count} ventes (Illimité ⭐)`;
+        } else {
+            counterText.textContent = `${count} / ${limit} ventes`;
+        }
+    }
+
+    if (progressBar) {
+        if (isPro) {
+            progressBar.style.width = '100%';
+            progressBar.className = 'quota-progress-bar pro';
+        } else {
+            const pct = Math.min(100, Math.round((count / limit) * 100));
+            progressBar.style.width = pct + '%';
+            if (pct >= 90) {
+                progressBar.className = 'quota-progress-bar danger';
+            } else if (pct >= 70) {
+                progressBar.className = 'quota-progress-bar warning';
+            } else {
+                progressBar.className = 'quota-progress-bar';
+            }
+        }
+    }
+
+    if (quotaHint) {
+        if (isPro) {
+            quotaHint.textContent = "Votre boutique bénéficie de ventes illimitées et de toutes les fonctionnalités FreshStock Pro.";
+        } else if (count >= limit) {
+            quotaHint.innerHTML = "<strong style='color: var(--accent-red);'>⚠️ Quota mensuel atteint (50/50) ! Passez à FreshStock Pro pour continuer à enregistrer vos ventes.</strong>";
+        } else {
+            const remaining = limit - count;
+            quotaHint.textContent = `Il vous reste ${remaining} vente${remaining > 1 ? 's' : ''} gratuite${remaining > 1 ? 's' : ''} ce mois-ci.`;
+        }
+    }
+
+    const freeCard = document.getElementById('pricingCardFree');
+    const proCard = document.getElementById('pricingCardPro');
+    if (freeCard && proCard) {
+        if (isPro) {
+            freeCard.classList.remove('featured');
+            proCard.classList.add('featured');
+        }
+    }
+}
+
+function initSubscriptionModal() {
+    const modal = document.getElementById('subscriptionModal');
+    const btnOpen = document.getElementById('btnOpenSubscription');
+    const btnClose = document.getElementById('closeSubscriptionBtn');
+    const btnCloseFooter = document.getElementById('closeSubModalBtn');
+
+    if (!modal) return;
+
+    const openModal = () => {
+        updateSubscriptionQuotaUI();
+        const waBtn = document.getElementById('btnUpgradeWhatsApp');
+        if (waBtn && currentStore) {
+            const storeName = currentStore.name || "Ma Boutique";
+            const msg = encodeURIComponent(`Bonjour, je souhaite activer l'abonnement FreshStock Pro pour ma boutique "${storeName}" (ID: ${currentStoreId || 'n/a'}).`);
+            waBtn.href = `https://wa.me/221770000000?text=${msg}`;
+        }
+        modal.classList.add('active');
+    };
+
+    const closeModal = () => modal.classList.remove('active');
+
+    if (btnOpen) btnOpen.addEventListener('click', openModal);
+    if (btnClose) btnClose.addEventListener('click', closeModal);
+    if (btnCloseFooter) btnCloseFooter.addEventListener('click', closeModal);
+    modal.addEventListener('click', (e) => { if (e.target === modal) closeModal(); });
+}
+
 document.addEventListener('DOMContentLoaded', () => {
     initNavigation();
     initThemeToggle();
-    initRealtimeUpdates();
     initAddModal();
     initNotifModal();
     initWasteModal();
     initDebtModal();
     initPOS();
+    initTeamModal();
+    initSubscriptionModal();
     initAuth();
     initCSVExports();
     
