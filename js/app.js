@@ -2215,7 +2215,7 @@ function renderTeamTable() {
     tbody.innerHTML = '';
 
     if (!allTeamMembers || allTeamMembers.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 20px;">Aucun membre d'équipe enregistré. Cliquez sur "Ajouter un Vendeur" pour inviter un collaborateur.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">Aucun membre d'équipe enregistré. Cliquez sur "Ajouter un Vendeur" pour inviter un collaborateur.</td></tr>`;
         return;
     }
 
@@ -2233,6 +2233,12 @@ function renderTeamTable() {
 
         const displayName = escapeHTML(member.displayName || member.email.split('@')[0]);
         const email = escapeHTML(member.email || '');
+        const memberUid = member.id || member.uid;
+        const isSelf = (auth.currentUser && (memberUid === auth.currentUser.uid || member.email === auth.currentUser.email));
+
+        const actionHtml = isSelf 
+            ? `<span style="color: var(--text-muted); font-size: 12px; font-weight: 500;">(Votre compte)</span>`
+            : `<button class="btn-icon delete-team-btn" data-id="${memberUid}" data-name="${displayName}" title="Retirer ce collaborateur" style="color: #ef4444;"><i class='bx bx-trash'></i></button>`;
 
         tr.innerHTML = `
             <td>
@@ -2245,8 +2251,28 @@ function renderTeamTable() {
             <td><span class="role-pill ${roleClass}">${roleName}</span></td>
             <td><small style="color: var(--text-muted);">${permText}</small></td>
             <td>${escapeHTML(dateStr || '-')}</td>
+            <td>${actionHtml}</td>
         `;
         tbody.appendChild(tr);
+    });
+
+    document.querySelectorAll('.delete-team-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const memberId = e.currentTarget.getAttribute('data-id');
+            const memberName = e.currentTarget.getAttribute('data-name');
+            if (confirm(`Êtes-vous sûr de vouloir retirer "${memberName}" de votre équipe ?`)) {
+                try {
+                    if (auth.currentUser) {
+                        await deleteDoc(doc(db, 'users', memberId));
+                    }
+                    logAction("ÉQUIPE", `Collaborateur "${memberName}" retiré de l'équipe.`);
+                    alert(`Le collaborateur "${memberName}" a été retiré de l'équipe.`);
+                } catch (err) {
+                    console.error("Erreur suppression collaborateur:", err);
+                    alert("Erreur lors du retrait du collaborateur: " + (err.message || err.code));
+                }
+            }
+        });
     });
 }
 
