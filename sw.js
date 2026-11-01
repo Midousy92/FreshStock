@@ -1,4 +1,4 @@
-const CACHE_NAME = 'freshstock-v1';
+const CACHE_NAME = 'freshstock-v2';
 const ASSETS = [
   './',
   './index.html',
