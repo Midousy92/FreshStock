@@ -123,31 +123,38 @@
 
     <!-- APPLICATION (Masquée par défaut) -->
     <div class="app-container" id="app-container" style="display: none;">
-        <!-- Sidebar -->
-        <aside class="sidebar">
-            <div class="logo">
-                <i class='bx bxs-lemon'></i>
-                <span>FreshStock</span>
+        <!-- Backdrop pour le menu mobile drawer -->
+        <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+        <!-- Sidebar (Desktop fixe & Mobile Drawer) -->
+        <aside class="sidebar" id="appSidebar">
+            <div class="sidebar-header">
+                <div class="logo">
+                    <i class='bx bxs-lemon'></i>
+                    <span>FreshStock</span>
+                </div>
+                <button type="button" class="sidebar-close-btn" id="closeSidebarBtn" aria-label="Fermer le menu">
+                    <i class='bx bx-x'></i>
+                </button>
             </div>
             <nav class="nav-menu" id="main-nav">
-                <a href="#" class="nav-item active admin-only" data-target="view-dashboard"><i class='bx bxs-dashboard'></i> Tableau de bord</a>
-                <a href="#" class="nav-item" data-target="view-ventes"><i class='bx bx-cart'></i> Point de Vente</a>
-                <a href="#" class="nav-item admin-only" data-target="view-arrivages"><i class='bx bxs-truck'></i> Arrivages</a>
-                <a href="#" class="nav-item" data-target="view-clients"><i class='bx bxs-group'></i> Clients (CRM)</a>
-                <a href="#" class="nav-item" data-target="view-historique"><i class='bx bx-history'></i> Historique</a>
-                <a href="#" class="nav-item admin-only" data-target="view-rapports"><i class='bx bxs-report' ></i> Rapports</a>
-                <a href="#" class="nav-item admin-only" data-target="view-team"><i class='bx bxs-user-detail'></i> Équipe</a>
+                <a href="#" class="nav-item active admin-only" data-target="view-dashboard"><i class='bx bxs-dashboard'></i> <span>Tableau de bord</span></a>
+                <a href="#" class="nav-item" data-target="view-ventes"><i class='bx bx-cart'></i> <span>Point de Vente</span></a>
+                <a href="#" class="nav-item admin-only" data-target="view-arrivages"><i class='bx bxs-truck'></i> <span>Arrivages</span></a>
+                <a href="#" class="nav-item" data-target="view-clients"><i class='bx bxs-group'></i> <span>Clients (CRM)</span></a>
+                <a href="#" class="nav-item" data-target="view-historique"><i class='bx bx-history'></i> <span>Historique</span></a>
+                <a href="#" class="nav-item admin-only" data-target="view-rapports"><i class='bx bxs-report' ></i> <span>Rapports</span></a>
+                <a href="#" class="nav-item admin-only" data-target="view-team"><i class='bx bxs-user-detail'></i> <span>Équipe</span></a>
             </nav>
         </aside>
 
         <!-- Main Content -->
         <main class="main-content">
             <header class="top-header">
-                <div class="search-bar">
-                    <i class='bx bx-search'></i>
-                    <input type="text" id="searchInput" placeholder="Rechercher un fruit, une origine...">
-                </div>
-                <div class="user-profile">
+                <div class="header-left">
+                    <button type="button" class="mobile-menu-btn" id="openSidebarBtn" aria-label="Ouvrir le menu">
+                        <i class='bx bx-menu'></i>
+                    </button>
                     <!-- Badges Boutique & Forfait SaaS -->
                     <div class="store-badge" id="currentStoreBadge" title="Boutique active">
                         <i class='bx bxs-store'></i>
@@ -157,9 +164,16 @@
                         <i class='bx bxs-crown'></i> <span id="planLabel">Gratuit</span>
                     </button>
                     <span class="role-pill admin" id="currentUserRoleBadge">Gérant</span>
+                </div>
 
+                <div class="search-bar">
+                    <i class='bx bx-search'></i>
+                    <input type="text" id="searchInput" placeholder="Rechercher un fruit, une origine...">
+                </div>
+
+                <div class="user-profile">
                     <!-- Switch Theme -->
-                    <button id="themeToggleBtn" title="Changer le thème" style="background: transparent; border: none; cursor: pointer; color: var(--text-main); font-size: 24px; margin-right: 10px; display: flex; align-items: center;">
+                    <button id="themeToggleBtn" title="Changer le thème" style="background: transparent; border: none; cursor: pointer; color: var(--text-main); font-size: 22px; display: flex; align-items: center;">
                         <i class='bx bx-moon' id="themeIcon"></i>
                     </button>
 
@@ -169,7 +183,7 @@
                     </div>
                     <img src="https://ui-avatars.com/api/?name=Admin&background=10b981&color=fff" alt="Profile" id="userAvatar">
                     <span id="currentUserEmail">Admin</span>
-                    <button id="logoutBtn" title="Déconnexion" style="background: transparent; border: none; cursor: pointer; color: var(--accent-red); font-size: 20px; margin-left: 10px;"><i class='bx bx-log-out'></i></button>
+                    <button id="logoutBtn" title="Déconnexion" style="background: transparent; border: none; cursor: pointer; color: var(--accent-red); font-size: 20px;"><i class='bx bx-log-out'></i></button>
                 </div>
             </header>
 
@@ -536,6 +550,30 @@
                 </div>
             </section>
         </main>
+
+        <!-- Barre de Navigation Mobile Inférieure (Écrans mobiles <= 768px) -->
+        <nav class="mobile-bottom-nav" id="mobileBottomNav">
+            <a href="#" class="bottom-nav-item active admin-only" data-target="view-dashboard">
+                <i class='bx bxs-dashboard'></i>
+                <span>Tableau</span>
+            </a>
+            <a href="#" class="bottom-nav-item" data-target="view-ventes">
+                <i class='bx bx-cart'></i>
+                <span>Caisse</span>
+            </a>
+            <a href="#" class="bottom-nav-item admin-only" data-target="view-arrivages">
+                <i class='bx bxs-truck'></i>
+                <span>Stock</span>
+            </a>
+            <a href="#" class="bottom-nav-item" data-target="view-clients">
+                <i class='bx bxs-group'></i>
+                <span>Clients</span>
+            </a>
+            <a href="#" class="bottom-nav-item" id="bottomNavMenuBtn">
+                <i class='bx bx-menu'></i>
+                <span>Menu</span>
+            </a>
+        </nav>
     </div>
 
     <!-- Notif Modal -->

@@ -310,18 +310,58 @@ function renderHistoryTable() {
 
 // ---------------- NAV LOGIC ----------------
 function initNavigation() {
-    const navItems = document.querySelectorAll('.nav-item[data-target]');
+    const navItems = document.querySelectorAll('.nav-item[data-target], .bottom-nav-item[data-target]');
+    const sidebar = document.getElementById('appSidebar');
+    const backdrop = document.getElementById('sidebarBackdrop');
+
+    const closeMobileSidebar = () => {
+        if (sidebar) sidebar.classList.remove('mobile-open');
+        if (backdrop) backdrop.classList.remove('active');
+        document.body.classList.remove('no-scroll');
+    };
+
+    const openMobileSidebar = () => {
+        if (sidebar) sidebar.classList.add('mobile-open');
+        if (backdrop) backdrop.classList.add('active');
+        document.body.classList.add('no-scroll');
+    };
+
     navItems.forEach(item => {
         item.addEventListener('click', (e) => {
             e.preventDefault();
-            document.querySelectorAll('.nav-item').forEach(nav => nav.classList.remove('active'));
-            document.querySelectorAll('.page-view').forEach(view => view.classList.remove('active'));
-            
-            e.currentTarget.classList.add('active');
             const targetId = e.currentTarget.getAttribute('data-target');
-            document.getElementById(targetId).classList.add('active');
+            if (!targetId) return;
+
+            document.querySelectorAll('.nav-item, .bottom-nav-item').forEach(nav => {
+                if (nav.getAttribute('data-target') === targetId) {
+                    nav.classList.add('active');
+                } else {
+                    nav.classList.remove('active');
+                }
+            });
+
+            document.querySelectorAll('.page-view').forEach(view => view.classList.remove('active'));
+            const targetView = document.getElementById(targetId);
+            if (targetView) targetView.classList.add('active');
+
+            closeMobileSidebar();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
         });
     });
+
+    const btnOpenSidebar = document.getElementById('openSidebarBtn');
+    if (btnOpenSidebar) btnOpenSidebar.addEventListener('click', openMobileSidebar);
+
+    const btnBottomMenu = document.getElementById('bottomNavMenuBtn');
+    if (btnBottomMenu) btnBottomMenu.addEventListener('click', (e) => {
+        e.preventDefault();
+        openMobileSidebar();
+    });
+
+    const btnCloseSidebar = document.getElementById('closeSidebarBtn');
+    if (btnCloseSidebar) btnCloseSidebar.addEventListener('click', closeMobileSidebar);
+
+    if (backdrop) backdrop.addEventListener('click', closeMobileSidebar);
 }
 
 // ---------------- REALTIME & PERSISTENCE ----------------
@@ -2201,13 +2241,15 @@ function applyRolePermissions(role) {
     if (role === 'cashier') {
         adminElements.forEach(el => el.style.display = 'none');
         // Rediriger le caissier vers le POS (Caisse Ventes) par défaut
-        const activeNav = document.querySelector('.nav-item.active');
+        const activeNav = document.querySelector('.nav-item.active, .bottom-nav-item.active');
         if (!activeNav || activeNav.classList.contains('admin-only')) {
-            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            document.querySelectorAll('.nav-item, .bottom-nav-item').forEach(n => n.classList.remove('active'));
             document.querySelectorAll('.page-view').forEach(p => p.classList.remove('active'));
             const posNav = document.querySelector('.nav-item[data-target="view-ventes"]');
+            const posBottomNav = document.querySelector('.bottom-nav-item[data-target="view-ventes"]');
             const posView = document.getElementById('view-ventes');
             if (posNav) posNav.classList.add('active');
+            if (posBottomNav) posBottomNav.classList.add('active');
             if (posView) posView.classList.add('active');
         }
     } else {
