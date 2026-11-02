@@ -447,6 +447,7 @@ function renderRecentSalesTable() {
             dateStr = d.toLocaleString('fr-FR', {day: '2-digit', month: '2-digit', hour: '2-digit', minute:'2-digit'});
         }
         
+        const sellerName = escapeHTML(sale.sellerName || 'Gérant');
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td>${escapeHTML(dateStr)}</td>
@@ -455,6 +456,7 @@ function renderRecentSalesTable() {
                 <small style="color: var(--text-muted);">${escapeHTML(sale.clientPhone)}</small>
             </td>
             <td>${escapeHTML(sale.fruitName)}</td>
+            <td><span class="role-pill cashier" style="font-size: 11px; padding: 2px 7px; display: inline-flex; align-items: center; gap: 3px; font-weight: 600;"><i class='bx bx-user'></i> ${sellerName}</span></td>
             <td><span class="status-badge" style="background: rgba(255,255,255,0.15); color: var(--text-main); font-weight: 500;">${escapeHTML(sale.paymentMethod || 'Espèces')}</span></td>
             <td><strong>${formatCurrency(sale.totalPrice || 0)}</strong></td>
             <td>
@@ -1152,6 +1154,7 @@ function initPOS() {
                     paymentMethod: paymentMethod,
                     clientName: clientName,
                     clientPhone: clientPhone,
+                    sellerName: currentUserProfile?.displayName || (auth.currentUser?.email ? auth.currentUser.email.split('@')[0] : "Gérant"),
                     createdAtStr: new Date().toLocaleString('fr-FR')
                 });
             }
@@ -1216,6 +1219,8 @@ function openReceiptModal(sale) {
     document.getElementById('receiptClientName').textContent = sale.clientName || 'Passage';
     document.getElementById('receiptClientPhone').textContent = sale.clientPhone || '-';
     document.getElementById('receiptPaymentMethod').textContent = sale.paymentMethod || 'Espèces';
+    const sellerEl = document.getElementById('receiptSellerName');
+    if (sellerEl) sellerEl.textContent = sale.sellerName || 'Gérant';
 
     const itemsTbody = document.getElementById('receiptItems');
     if (itemsTbody) {
@@ -1274,8 +1279,8 @@ function printInvoice(sale) {
                 <div class="box">
                     <h3>Émetteur</h3>
                     <strong style="font-size: 16px;">${storeName}</strong><br>
-                    Plateforme SaaS FreshStock<br>
-                    Tél: ${currentUserProfile?.email || 'Support FreshStock'}
+                    <strong>Vendeur :</strong> ${escapeHTML(sale.sellerName || 'Gérant')}<br>
+                    Contact: ${currentUserProfile?.email || 'Support FreshStock'}
                 </div>
                 <div class="box">
                     <h3>Client / Destinataire</h3>
@@ -1707,9 +1712,10 @@ function initAuth() {
                 const userDocRef = doc(db, 'users', user.uid);
                 let userSnap = await getDoc(userDocRef);
 
-                if (!userSnap.exists()) {
-                    // Provisionnement automatique pour comptes préexistants
-                    const defaultStoreId = "store_" + user.uid.slice(0, 10);
+                if (!userSnap.exists() || !userSnap.data()?.storeId) {
+                    // Provisionnement automatique pour comptes préexistants ou sans storeId
+                    const existingData = userSnap.exists() ? userSnap.data() : {};
+                    const defaultStoreId = existingData.storeId || ("store_" + user.uid.slice(0, 10));
                     const storeDocRef = doc(db, 'stores', defaultStoreId);
                     const storeSnap = await getDoc(storeDocRef);
 
@@ -1721,17 +1727,17 @@ function initAuth() {
                             currency: "FCFA",
                             plan: "free",
                             createdAt: serverTimestamp()
-                        });
+                        }, { merge: true });
                     }
 
                     await setDoc(userDocRef, {
                         uid: user.uid,
                         email: user.email,
-                        displayName: user.displayName || user.email.split('@')[0],
+                        displayName: existingData.displayName || user.displayName || user.email.split('@')[0],
                         storeId: defaultStoreId,
-                        role: "admin",
-                        createdAt: serverTimestamp()
-                    });
+                        role: existingData.role || "admin",
+                        createdAt: existingData.createdAt || serverTimestamp()
+                    }, { merge: true });
 
                     userSnap = await getDoc(userDocRef);
                 }
@@ -1873,10 +1879,10 @@ function initCSVExports() {
     if(btnSales) {
         btnSales.addEventListener('click', () => {
             const curr = window.storeCurrency || 'FCFA';
-            let csv = `Date;Client;Telephone;Adresse;Produit;Quantite (kg);Prix Unitaire (${curr});Total (${curr})\n`;
+            let csv = `Date;Client;Telephone;Adresse;Produit;Quantite (kg);Prix Unitaire (${curr});Total (${curr});Vendeur\n`;
             allSalesData.forEach(s => {
                 const dateStr = s.createdAt ? new Date(s.createdAt.toDate()).toLocaleString('fr-FR') : "";
-                csv += `"${dateStr}";"${s.clientName || ''}";"${s.clientPhone || ''}";"${s.clientAddress || ''}";"${s.fruitName || ''}";${s.qty || 0};${s.pricePerKg || 0};${s.totalPrice || 0}\n`;
+                csv += `"${dateStr}";"${s.clientName || ''}";"${s.clientPhone || ''}";"${s.clientAddress || ''}";"${s.fruitName || ''}";${s.qty || 0};${s.pricePerKg || 0};${s.totalPrice || 0};"${s.sellerName || 'Gérant'}"\n`;
             });
             downloadCSV(csv, `FreshStock_Ventes_${new Date().toISOString().slice(0,10)}.csv`);
         });
@@ -2214,12 +2220,34 @@ function renderTeamTable() {
     if (!tbody) return;
     tbody.innerHTML = '';
 
-    if (!allTeamMembers || allTeamMembers.length === 0) {
+    // Garantir que le compte gérant/admin connecté apparaisse toujours dans la liste
+    let membersToRender = [...allTeamMembers];
+    if (auth.currentUser) {
+        const currentUid = auth.currentUser.uid;
+        const currentEmail = (auth.currentUser.email || '').toLowerCase();
+        const exists = membersToRender.some(m => 
+            m.id === currentUid || 
+            m.uid === currentUid || 
+            (m.email && m.email.toLowerCase() === currentEmail)
+        );
+        if (!exists) {
+            membersToRender.unshift({
+                id: currentUid,
+                uid: currentUid,
+                email: auth.currentUser.email || '',
+                displayName: currentUserProfile?.displayName || auth.currentUser.displayName || (auth.currentUser.email ? auth.currentUser.email.split('@')[0] : 'Gérant'),
+                role: currentUserRole || currentUserProfile?.role || 'admin',
+                createdAt: currentUserProfile?.createdAt || null
+            });
+        }
+    }
+
+    if (!membersToRender || membersToRender.length === 0) {
         tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 20px;">Aucun membre d'équipe enregistré. Cliquez sur "Ajouter un Vendeur" pour inviter un collaborateur.</td></tr>`;
         return;
     }
 
-    allTeamMembers.forEach(member => {
+    membersToRender.forEach(member => {
         const tr = document.createElement('tr');
         const roleName = member.role === 'admin' ? 'Gérant / Admin' : 'Caissier / Vendeur';
         const roleClass = member.role === 'admin' ? 'admin' : 'cashier';
@@ -2231,7 +2259,7 @@ function renderTeamTable() {
             dateStr = d.toLocaleDateString('fr-FR');
         }
 
-        const displayName = escapeHTML(member.displayName || member.email.split('@')[0]);
+        const displayName = escapeHTML(member.displayName || (member.email ? member.email.split('@')[0] : 'Collaborateur'));
         const email = escapeHTML(member.email || '');
         const memberUid = member.id || member.uid;
         const isSelf = (auth.currentUser && (memberUid === auth.currentUser.uid || member.email === auth.currentUser.email));
@@ -2243,7 +2271,7 @@ function renderTeamTable() {
         tr.innerHTML = `
             <td>
                 <div style="display: flex; align-items: center; gap: 10px;">
-                    <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(member.displayName || member.email)}&background=10b981&color=fff" style="width: 32px; height: 32px; border-radius: 50%;">
+                    <img src="https://ui-avatars.com/api/?name=${encodeURIComponent(member.displayName || member.email || 'FS')}&background=10b981&color=fff" style="width: 32px; height: 32px; border-radius: 50%;">
                     <strong>${displayName}</strong>
                 </div>
             </td>
